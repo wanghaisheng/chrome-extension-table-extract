@@ -1,5 +1,5 @@
 import { test, expect, chromium } from '@playwright/test';
-import { mkdtempSync } from 'fs';
+import { mkdtempSync, readFileSync } from 'fs';
 import { tmpdir } from 'os';
 import { join, resolve } from 'path';
 
@@ -207,10 +207,28 @@ test('manual opt-in enables domain auto-capture on subsequent URLs', async () =>
   await expect(extPage.getByText(url2)).toBeVisible({ timeout: 20_000 });
   await expect(extPage.getByText(url1)).toBeVisible();
 
+  // Filters: narrow to page-2 only.
+  await extPage.getByPlaceholder('example.com').fill('example.test');
+  await extPage.getByPlaceholder('/path').fill('page-2');
+  await extPage.getByRole('button', { name: 'Apply filters' }).click();
+  await expect(extPage.getByText(url2)).toBeVisible();
+  await expect(extPage.getByText(url1)).toHaveCount(0);
+
   // Open the newest entry (url2 should be the newest).
   const openButtons = extPage.getByRole('button', { name: 'Open' });
   await expect(openButtons.first()).toBeVisible();
   await openButtons.first().click();
+
+  // Export: download JSON and validate it includes stored content.
+  const downloadPromise = extPage.waitForEvent('download');
+  await extPage.getByRole('button', { name: 'Download JSON' }).click();
+  const download = await downloadPromise;
+  const filePath = await download.path();
+  expect(filePath).toBeTruthy();
+  const jsonText = readFileSync(filePath as string, 'utf-8');
+  const parsed = JSON.parse(jsonText);
+  expect(parsed.headers).toEqual(['Name', 'Age']);
+  expect(JSON.stringify(parsed.rows)).toContain('Charlie');
 
   // Expect the preview table to include the header and at least one cell from page 2.
   await expect(extPage.getByText('Name')).toBeVisible();

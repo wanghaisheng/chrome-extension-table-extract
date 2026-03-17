@@ -9,9 +9,11 @@ import {
   clearAllData,
   deleteDomainData,
   getExtractionTable,
+  listExtractions,
   listRecentExtractions,
 } from '../utils/sqlite/wa';
 import { clearSqliteLocalSettings, getRetentionPolicy, listEnabledDomains, RetentionPolicy, setDomainEnabled, setRetentionPolicy } from '../utils/sqlite/storage';
+import { toCSV, toJSON, toTSV } from '../utils/export/serialize';
 
 type Props = {
   onBack: () => void;
@@ -34,6 +36,10 @@ const History: FunctionComponent<Props> = ({ onBack }) => {
   const [isWorking, setWorking] = useState(false);
   const [retention, setRetention] = useState<RetentionPolicy>({ enabled: false, keepLastPerDomain: 50 });
   const [statusMsg, setStatusMsg] = useState<string>('');
+  const [filterDomain, setFilterDomain] = useState<string>('');
+  const [filterUrl, setFilterUrl] = useState<string>('');
+  const [filterAfter, setFilterAfter] = useState<string>(''); // yyyy-mm-dd
+  const [filterBefore, setFilterBefore] = useState<string>(''); // yyyy-mm-dd
 
   useEffect(() => {
     Promise.all([listRecentExtractions(25), listEnabledDomains(), getRetentionPolicy()])
@@ -61,6 +67,76 @@ const History: FunctionComponent<Props> = ({ onBack }) => {
     setItems(extractions);
     setEnabledDomains(domains);
     setRetention(policy);
+  };
+
+  const applyFilters = async () => {
+    setWorking(true);
+    try {
+      setStatusMsg('');
+      const afterMs = filterAfter ? new Date(`${filterAfter}T00:00:00`).getTime() : undefined;
+      const beforeMs = filterBefore ? new Date(`${filterBefore}T23:59:59`).getTime() : undefined;
+      const extractions = await listExtractions(
+        {
+          domain: filterDomain.trim() || undefined,
+          urlSubstring: filterUrl.trim() || undefined,
+          extractedAfter: afterMs,
+          extractedBefore: beforeMs,
+        },
+        50,
+      );
+      setItems(extractions);
+      setSelectedId(null);
+    } finally {
+      setWorking(false);
+    }
+  };
+
+  const resetFilters = async () => {
+    setFilterDomain('');
+    setFilterUrl('');
+    setFilterAfter('');
+    setFilterBefore('');
+    await refresh();
+  };
+
+  const copySelected = async () => {
+    if (!selectedId) return;
+    setWorking(true);
+    try {
+      setStatusMsg('');
+      const full = await getExtractionTable(selectedId, undefined);
+      await navigator.clipboard.writeText(toTSV(full));
+      setStatusMsg('Copied TSV to clipboard.');
+    } finally {
+      setWorking(false);
+    }
+  };
+
+  const downloadSelected = async (format: 'tsv' | 'csv' | 'json') => {
+    if (!selectedId) return;
+    setWorking(true);
+    try {
+      setStatusMsg('');
+      const full = await getExtractionTable(selectedId, undefined);
+      const content =
+        format === 'tsv' ? toTSV(full) :
+        format === 'csv' ? toCSV(full) :
+        toJSON(full);
+
+      const mime = format === 'json' ? 'application/json' : 'text/plain';
+      const blob = new Blob([content], { type: mime });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `table-extract-${selectedId}.${format}`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+      setStatusMsg(`Downloaded ${format.toUpperCase()}.`);
+    } finally {
+      setWorking(false);
+    }
   };
 
   const toggleDomain = async (domain: string, enabled: boolean) => {
@@ -146,6 +222,44 @@ const History: FunctionComponent<Props> = ({ onBack }) => {
 
       <div className="table-preview">
         <div className="table-header">
+          <caption className="title">Filters</caption>
+        </div>
+        <div className="table-body">
+          <div className="table-actions">
+            <div className="pill">Domain</div>
+            <input
+              style={{ width: '12rem' }}
+              value={filterDomain}
+              disabled={isWorking}
+              onInput={(e: any) => setFilterDomain(String(e.currentTarget?.value ?? ''))}
+              placeholder="example.com"
+            />
+          </div>
+          <div className="table-actions">
+            <div className="pill">URL contains</div>
+            <input
+              style={{ width: '12rem' }}
+              value={filterUrl}
+              disabled={isWorking}
+              onInput={(e: any) => setFilterUrl(String(e.currentTarget?.value ?? ''))}
+              placeholder="/path"
+            />
+          </div>
+          <div className="table-actions">
+            <div className="pill">After</div>
+            <input type="date" value={filterAfter} disabled={isWorking} onInput={(e: any) => setFilterAfter(String(e.currentTarget?.value ?? ''))} />
+            <div className="pill">Before</div>
+            <input type="date" value={filterBefore} disabled={isWorking} onInput={(e: any) => setFilterBefore(String(e.currentTarget?.value ?? ''))} />
+          </div>
+          <div className="table-actions">
+            <Button variant="primary" disabled={isWorking} onClick={applyFilters}>Apply filters</Button>
+            <Button variant="secondary" disabled={isWorking} onClick={resetFilters}>Reset</Button>
+          </div>
+        </div>
+      </div>
+
+      <div className="table-preview">
+        <div className="table-header">
           <caption className="title">Domains</caption>
           <div className="pill">{`${domainsInDb.length} total`}</div>
         </div>
@@ -222,6 +336,12 @@ const History: FunctionComponent<Props> = ({ onBack }) => {
             <div className="pill">{selected.url}</div>
             <div className="pill">{formatTs(selected.extractedAt)}</div>
             <div className="pill">{`schema v${selected.schemaVersion}`}</div>
+            <div className="table-actions">
+              <Button variant="primary" disabled={isWorking} onClick={copySelected}>Copy TSV</Button>
+              <Button variant="secondary" disabled={isWorking} onClick={() => downloadSelected('tsv')}>Download TSV</Button>
+              <Button variant="secondary" disabled={isWorking} onClick={() => downloadSelected('csv')}>Download CSV</Button>
+              <Button variant="secondary" disabled={isWorking} onClick={() => downloadSelected('json')}>Download JSON</Button>
+            </div>
 
             <div className="table-container" style={{ marginTop: '0.5rem' }}>
               {table ? (

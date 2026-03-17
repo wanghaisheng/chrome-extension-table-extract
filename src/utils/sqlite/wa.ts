@@ -313,7 +313,7 @@ export async function listRecentExtractions(limit = 25): Promise<ExtractionSumma
   }));
 }
 
-export async function getExtractionTable(extractionId: number, maxRows = 20): Promise<string[][]> {
+export async function getExtractionTable(extractionId: number, maxRows: number | undefined = 20): Promise<string[][]> {
   const { sqlite3, db } = await getClient();
 
   const schemaRes = await sqlite3.execWithParams(db, `SELECT schema_id FROM extractions WHERE id = ?`, [extractionId]);
@@ -327,15 +327,23 @@ export async function getExtractionTable(extractionId: number, maxRows = 20): Pr
   );
   const headers = (headersRes.rows ?? []).map((r: any[]) => String(r[0] ?? ''));
 
+  const hasLimit = typeof maxRows === 'number' && Number.isFinite(maxRows);
   const cellsRes = await sqlite3.execWithParams(
     db,
-    `
-      SELECT row_index, col_index, value
-      FROM extraction_cells
-      WHERE extraction_id = ? AND row_index < ?
-      ORDER BY row_index ASC, col_index ASC
-    `,
-    [extractionId, maxRows],
+    hasLimit
+      ? `
+        SELECT row_index, col_index, value
+        FROM extraction_cells
+        WHERE extraction_id = ? AND row_index < ?
+        ORDER BY row_index ASC, col_index ASC
+      `
+      : `
+        SELECT row_index, col_index, value
+        FROM extraction_cells
+        WHERE extraction_id = ?
+        ORDER BY row_index ASC, col_index ASC
+      `,
+    hasLimit ? [extractionId, maxRows] : [extractionId],
   );
 
   const byRow: Record<number, Record<number, string>> = {};

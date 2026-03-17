@@ -46,15 +46,15 @@
 
 ## M1. Query + Export Primitives
 
-- [ ] M1.1 add filtered listing API: by domain/url/date range
-- [ ] M1.2 add export serializers: TSV/CSV/JSON (pure functions)
-- [ ] M1.3 unit tests for serializers and filter behavior
+- [x] M1.1 add filtered listing API: by domain/url/date range
+- [x] M1.2 add export serializers: TSV/CSV/JSON (pure functions)
+- [x] M1.3 unit tests for serializers and filter behavior
 
 ## M2. Popup UX: Filter + Export
 
-- [ ] M2.1 add History filters UI (domain/url/date range)
-- [ ] M2.2 add export actions in detail view (copy + download)
-- [ ] M2.3 add Playwright E2E: filter → export correctness
+- [x] M2.1 add History filters UI (domain/url/date range)
+- [x] M2.2 add export actions in detail view (copy + download)
+- [x] M2.3 add Playwright E2E: filter → export correctness
 
 ## M3. Schema Evolution UX (Optional / Stretch)
 
