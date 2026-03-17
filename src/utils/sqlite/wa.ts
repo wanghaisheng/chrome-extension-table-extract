@@ -216,6 +216,70 @@ export type ExtractionSummary = {
   schemaVersion: number;
 };
 
+export type ExtractionFilters = {
+  domain?: string;
+  urlSubstring?: string;
+  extractedAfter?: number; // ms epoch inclusive
+  extractedBefore?: number; // ms epoch inclusive
+};
+
+export async function listExtractions(filters: ExtractionFilters = {}, limit = 50): Promise<ExtractionSummary[]> {
+  const { sqlite3, db } = await getClient();
+
+  const where: string[] = [];
+  const params: any[] = [];
+
+  if (filters.domain) {
+    where.push(`d.domain = ?`);
+    params.push(filters.domain);
+  }
+  if (filters.urlSubstring) {
+    where.push(`e.url LIKE ?`);
+    params.push(`%${filters.urlSubstring}%`);
+  }
+  if (typeof filters.extractedAfter === 'number') {
+    where.push(`e.extracted_at >= ?`);
+    params.push(filters.extractedAfter);
+  }
+  if (typeof filters.extractedBefore === 'number') {
+    where.push(`e.extracted_at <= ?`);
+    params.push(filters.extractedBefore);
+  }
+
+  const whereSql = where.length ? `WHERE ${where.join(' AND ')}` : '';
+
+  const res = await sqlite3.execWithParams(
+    db,
+    `
+      SELECT
+        e.id,
+        d.domain,
+        e.url,
+        e.page_title,
+        e.extracted_at,
+        e.row_count,
+        s.version
+      FROM extractions e
+      JOIN schemas s ON s.id = e.schema_id
+      JOIN domains d ON d.id = s.domain_id
+      ${whereSql}
+      ORDER BY e.extracted_at DESC, e.id DESC
+      LIMIT ?
+    `,
+    [...params, limit],
+  );
+
+  return (res.rows ?? []).map((r: any[]) => ({
+    id: Number(r[0]),
+    domain: String(r[1] ?? ''),
+    url: String(r[2] ?? ''),
+    pageTitle: r[3] == null ? undefined : String(r[3]),
+    extractedAt: Number(r[4]),
+    rowCount: Number(r[5]),
+    schemaVersion: Number(r[6]),
+  }));
+}
+
 export async function listRecentExtractions(limit = 25): Promise<ExtractionSummary[]> {
   const { sqlite3, db } = await getClient();
   const res = await sqlite3.execWithParams(
