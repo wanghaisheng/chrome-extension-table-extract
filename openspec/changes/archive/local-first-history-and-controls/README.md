@@ -18,7 +18,7 @@
 ## Source Context
 
 - `roadmap.md` "Next (0.1) – Make storage visible and manageable"
-- existing local-first capture change: `openspec/changes/add-sqlite-storage-for-extracted-data/`
+- existing local-first capture change: `openspec/changes/archive/add-sqlite-storage-for-extracted-data/`
 
 ## Why This Change Exists
 

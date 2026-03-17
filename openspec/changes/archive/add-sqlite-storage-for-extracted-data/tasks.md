@@ -50,36 +50,43 @@
 
 ## M1. Baseline SQLite Schema and Integration
 
-- [ ] M1.1 select and integrate a wasm SQLite library into the extension
-- [ ] M1.2 implement initialization logic to create the core tables if they do not exist
-- [ ] M1.3 add an internal storage API that accepts headers and row data and writes one extraction into the database
-- [ ] M1.4 validate stored data via manual SQLite queries in a test environment
-- [ ] M1.5 add a basic automated test (or scriptable test harness) that writes a known extraction and asserts on the resulting SQLite records
+- [x] M1.1 select and integrate a wasm SQLite library into the extension
+- [x] M1.2 implement initialization logic to create the core tables if they do not exist
+- [x] M1.3 add an internal storage API that accepts headers and row data and writes one extraction into the database
+- [x] M1.4 validate stored data via automated E2E + debug query APIs
+- [x] M1.5 add a basic automated test (or scriptable test harness) that writes a known extraction and asserts on the resulting SQLite records
 
 ## M2. Wire Extraction Flow and UI Button
 
-- [ ] M2.1 add a "Add extracted data to SQLite" button near the existing Rows export UI
-- [ ] M2.2 connect the button to the storage API using the current extraction result structure
-- [ ] M2.3 handle storage errors gracefully and surface user-friendly messages
-- [ ] M2.4 verify that existing "Open in Rows" behavior remains unchanged
-- [ ] M2.5 extend the test suite to cover:
+- [x] M2.1 add a "Add extracted data to SQLite" button near the existing export UI
+- [x] M2.2 connect the button to the storage API using the current extraction result structure
+- [x] M2.3 handle storage errors gracefully and surface user-friendly messages
+- [x] M2.4 verify that existing extraction → copy/export behavior remains unchanged
+- [x] M2.5 extend the test suite to cover:
   - end-to-end click on the new button in a browser-like environment
   - failures in SQLite initialization or writes that fall back cleanly
 
 ## M3. Optional Schema Evolution and Documentation
 
-- [ ] M3.1 define how header changes produce new schema versions per domain
-- [ ] M3.2 implement schema version detection and creation logic
-- [ ] M3.3 document SQLite storage behavior and schema rules in the project README or a dedicated doc
-- [ ] M3.4 add test cases that:
+- [x] M3.1 define how header changes produce new schema versions per domain
+- [x] M3.2 implement schema version detection and creation logic
+- [x] M3.3 document SQLite storage behavior and schema rules in the project README or a dedicated doc
+- [x] M3.4 add test cases that:
   - simulate header changes for the same domain and assert that new schema versions are created
   - confirm old extractions remain queryable with the original schema definition
 
 ## Closeout Rule
 
-- selected validation package
-- commands that ran
-- pass or fail status
-- residual risk
-- ADR or doc follow-up required
+- selected validation package:
+  - Playwright extension E2E
+  - Jest unit tests (sqlite core)
+- commands that ran:
+  - `npm run test:unit`
+  - `npm run test:pw`
+- pass or fail status:
+  - pass
+- residual risk:
+  - extension automation can be timing-sensitive (popup reload / IndexedDB warmup); E2E uses polling/waits to reduce flakes
+- ADR or doc follow-up required:
+  - none
 

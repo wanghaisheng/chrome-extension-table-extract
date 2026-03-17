@@ -45,7 +45,7 @@ Acceptance:
 
 - validation package should cover runtime feature changes for browser extensions
 - manual inspection of the SQLite database to verify domain, schema, extraction, and cell records for at least two URLs under the same domain
-- regression checks for the existing "Open in Rows" export path to ensure it remains functional
+- regression checks for the existing extraction/export flows to ensure they remain functional
 - additional checks for R4:
 - verify that, after a first manual opt-in on domain A, navigating to a second URL on domain A results in an automatic write when extraction succeeds
 - verify that domains without prior opt-in never auto-write, even when extraction succeeds

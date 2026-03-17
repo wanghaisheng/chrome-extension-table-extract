@@ -17,7 +17,7 @@
   - advanced analytics or full SQL console UI
   - cross-device sync
 - upstream dependencies:
-  - `openspec/changes/add-sqlite-storage-for-extracted-data/`
+  - `openspec/changes/archive/add-sqlite-storage-for-extracted-data/`
 - interface or delivery list:
   - query/delete APIs
   - popup UI (or dedicated extension page if needed)
