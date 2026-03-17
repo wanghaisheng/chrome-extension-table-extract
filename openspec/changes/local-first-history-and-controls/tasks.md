@@ -59,30 +59,38 @@
 
 ## M1. History Queries + Minimal History UI
 
-- [ ] M1.1 add query APIs to list recent extractions and load preview rows
-- [ ] M1.2 build a History view in the popup UI
-- [ ] M1.3 build an Extraction detail view with preview
-- [ ] M1.4 add Playwright E2E test: store → history visible → detail preview
+- [x] M1.1 add query APIs to list recent extractions and load preview rows
+- [x] M1.2 build a History view in the popup UI
+- [x] M1.3 build an Extraction detail view with preview
+- [x] M1.4 add Playwright E2E test: store → history visible → detail preview
 
 ## M2. Domain Controls + Per-domain Delete
 
-- [ ] M2.1 add domain list + auto-capture toggle UI
-- [ ] M2.2 implement disable/enable domain behavior (persistent)
-- [ ] M2.3 implement delete domain data (with confirmation)
-- [ ] M2.4 add Playwright E2E tests for toggle + delete domain
+- [x] M2.1 add domain list + auto-capture toggle UI
+- [x] M2.2 implement disable/enable domain behavior (persistent)
+- [x] M2.3 implement delete domain data (with confirmation)
+- [x] M2.4 add Playwright E2E tests for toggle + delete domain
 
 ## M3. Retention + Clear All + UX Polish
 
-- [ ] M3.1 implement optional retention policy (keep last N per domain)
-- [ ] M3.2 implement clear all local data (with confirmation)
-- [ ] M3.3 polish UX: empty states, success/error feedback
-- [ ] M3.4 unit tests for retention and deletion behavior
+- [x] M3.1 implement optional retention policy (keep last N per domain)
+- [x] M3.2 implement clear all local data (with confirmation)
+- [x] M3.3 polish UX: empty states, success/error feedback
+- [x] M3.4 unit tests for retention and deletion behavior
 
 ## Closeout Rule
 
-- selected validation package
-- commands that ran
-- pass or fail status
-- residual risk
-- ADR or doc follow-up required
+- selected validation package:
+  - Playwright extension E2E
+  - Jest unit tests (core + retention logic)
+- commands that ran:
+  - `npm run test:unit`
+  - `npm run test:pw`
+- pass or fail status:
+  - pass
+- residual risk:
+  - IndexedDB / extension popup timing can be flaky under automation; E2E uses polling/waits to reduce flakes
+  - destructive actions rely on browser confirmation dialogs
+- ADR or doc follow-up required:
+  - none
 

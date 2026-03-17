@@ -5,11 +5,16 @@
 * add local SQLite persistence for extracted tables (wa-sqlite + IndexedDB VFS)
 * add domain opt-in and same-domain auto-capture after first manual save
 * add "Add to SQLite" action in the preview UI
+* add History view for recent extractions with detail preview
+* add domain controls (enable/disable auto-capture) and per-domain delete
+* add optional retention policy (keep last N per domain) and clear-all lifecycle action
 
 ### Testing
 
 * add Playwright extension E2E test for SQLite opt-in + auto-capture (`npm run test:pw`)
+* extend Playwright E2E to cover domain controls and clear-all
 * add SQLite core unit tests (`npm run test:unit`)
+* add retention unit tests (`npm run test:unit`)
 
 ### Docs
 
