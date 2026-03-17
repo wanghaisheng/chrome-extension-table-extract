@@ -6,6 +6,11 @@ export async function getEnabledDomains(): Promise<Record<string, true>> {
   return (res?.[ENABLED_DOMAINS_KEY] as Record<string, true> | undefined) ?? {};
 }
 
+export async function listEnabledDomains(): Promise<string[]> {
+  const domains = await getEnabledDomains();
+  return Object.keys(domains).sort();
+}
+
 export async function setDomainEnabled(domain: string, enabled: boolean): Promise<void> {
   const domains = await getEnabledDomains();
   if (enabled) {

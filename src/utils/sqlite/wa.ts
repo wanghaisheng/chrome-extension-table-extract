@@ -297,3 +297,62 @@ export async function getExtractionTable(extractionId: number, maxRows = 20): Pr
   return [headers, ...dataRows];
 }
 
+export async function deleteDomainData(domain: string): Promise<void> {
+  const { sqlite3, db } = await getClient();
+
+  await sqlite3.run(db, 'BEGIN');
+  try {
+    // Delete cells and extractions first to satisfy foreign keys.
+    await sqlite3.run(
+      db,
+      `
+        DELETE FROM extraction_cells
+        WHERE extraction_id IN (
+          SELECT e.id
+          FROM extractions e
+          JOIN schemas s ON s.id = e.schema_id
+          JOIN domains d ON d.id = s.domain_id
+          WHERE d.domain = ?
+        )
+      `,
+      [domain],
+    );
+
+    await sqlite3.run(
+      db,
+      `
+        DELETE FROM extractions
+        WHERE schema_id IN (
+          SELECT s.id
+          FROM schemas s
+          JOIN domains d ON d.id = s.domain_id
+          WHERE d.domain = ?
+        )
+      `,
+      [domain],
+    );
+
+    await sqlite3.run(
+      db,
+      `
+        DELETE FROM schema_columns
+        WHERE schema_id IN (
+          SELECT s.id
+          FROM schemas s
+          JOIN domains d ON d.id = s.domain_id
+          WHERE d.domain = ?
+        )
+      `,
+      [domain],
+    );
+
+    await sqlite3.run(db, `DELETE FROM schemas WHERE domain_id = (SELECT id FROM domains WHERE domain = ?)`, [domain]);
+    await sqlite3.run(db, `DELETE FROM domains WHERE domain = ?`, [domain]);
+
+    await sqlite3.run(db, 'COMMIT');
+  } catch (e) {
+    await sqlite3.run(db, 'ROLLBACK');
+    throw e;
+  }
+}
+

@@ -3,7 +3,8 @@ import { useEffect, useMemo, useState } from 'preact/hooks';
 
 import Button from './button';
 import './preview.css';
-import { ExtractionSummary, getExtractionTable, listRecentExtractions } from '../utils/sqlite/wa';
+import { ExtractionSummary, deleteDomainData, getExtractionTable, listRecentExtractions } from '../utils/sqlite/wa';
+import { listEnabledDomains, setDomainEnabled } from '../utils/sqlite/storage';
 
 type Props = {
   onBack: () => void;
@@ -22,10 +23,15 @@ const History: FunctionComponent<Props> = ({ onBack }) => {
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [table, setTable] = useState<string[][] | null>(null);
   const [isLoading, setLoading] = useState(true);
+  const [enabledDomains, setEnabledDomains] = useState<string[]>([]);
+  const [isWorking, setWorking] = useState(false);
 
   useEffect(() => {
-    listRecentExtractions(25)
-      .then((res) => setItems(res))
+    Promise.all([listRecentExtractions(25), listEnabledDomains()])
+      .then(([extractions, domains]) => {
+        setItems(extractions);
+        setEnabledDomains(domains);
+      })
       .finally(() => setLoading(false));
   }, []);
 
@@ -38,6 +44,37 @@ const History: FunctionComponent<Props> = ({ onBack }) => {
   }, [selectedId]);
 
   const selected = useMemo(() => items.find((i) => i.id === selectedId) ?? null, [items, selectedId]);
+  const domainsInDb = useMemo(() => Array.from(new Set(items.map((i) => i.domain))).sort(), [items]);
+
+  const refresh = async () => {
+    const [extractions, domains] = await Promise.all([listRecentExtractions(25), listEnabledDomains()]);
+    setItems(extractions);
+    setEnabledDomains(domains);
+  };
+
+  const toggleDomain = async (domain: string, enabled: boolean) => {
+    setWorking(true);
+    try {
+      await setDomainEnabled(domain, enabled);
+      await refresh();
+    } finally {
+      setWorking(false);
+    }
+  };
+
+  const deleteDomain = async (domain: string) => {
+    const ok = window.confirm(`Delete all local data for ${domain}? This cannot be undone.`);
+    if (!ok) return;
+    setWorking(true);
+    try {
+      await deleteDomainData(domain);
+      await setDomainEnabled(domain, false);
+      await refresh();
+      setSelectedId(null);
+    } finally {
+      setWorking(false);
+    }
+  };
 
   if (isLoading) {
     return <div className="results">Loading history…</div>;
@@ -47,6 +84,37 @@ const History: FunctionComponent<Props> = ({ onBack }) => {
     <div className="results">
       <div className="table-actions">
         <Button variant="secondary" onClick={onBack}>Back</Button>
+      </div>
+
+      <div className="table-preview">
+        <div className="table-header">
+          <caption className="title">Domains</caption>
+          <div className="pill">{`${domainsInDb.length} total`}</div>
+        </div>
+        <div className="table-body">
+          {domainsInDb.length === 0 ? (
+            <div className="results">No domains yet.</div>
+          ) : (
+            domainsInDb.map((d) => {
+              const enabled = enabledDomains.includes(d);
+              return (
+                <div className="table-actions" key={d}>
+                  <div className="pill">{d}</div>
+                  <Button
+                    variant={enabled ? 'secondary' : 'primary'}
+                    disabled={isWorking}
+                    onClick={() => toggleDomain(d, !enabled)}
+                  >
+                    {enabled ? 'Disable auto-capture' : 'Enable auto-capture'}
+                  </Button>
+                  <Button variant="secondary" disabled={isWorking} onClick={() => deleteDomain(d)}>
+                    Delete data
+                  </Button>
+                </div>
+              );
+            })
+          )}
+        </div>
       </div>
 
       {selected ? (
@@ -63,13 +131,15 @@ const History: FunctionComponent<Props> = ({ onBack }) => {
             <div className="table-container" style={{ marginTop: '0.5rem' }}>
               {table ? (
                 <table>
-                  {table.slice(0, 6).map((row) => (
-                    <tr>
-                      {row.map((col) => (
-                        <td>{col}</td>
-                      ))}
-                    </tr>
-                  ))}
+                  <tbody>
+                    {table.slice(0, 6).map((row, rIdx) => (
+                      <tr key={rIdx}>
+                        {row.map((col, cIdx) => (
+                          <td key={cIdx}>{col}</td>
+                        ))}
+                      </tr>
+                    ))}
+                  </tbody>
                 </table>
               ) : (
                 <div>Loading preview…</div>
@@ -84,7 +154,7 @@ const History: FunctionComponent<Props> = ({ onBack }) => {
             <div className="results">No saved extractions yet.</div>
           ) : (
             items.map((i) => (
-              <div className="table-preview">
+              <div className="table-preview" key={i.id}>
                 <div className="table-header">
                   <caption className="title">{i.pageTitle ?? i.domain}</caption>
                   <div className="pill">{`${i.rowCount} rows`}</div>
