@@ -319,3 +319,72 @@ test('domain controls: disable auto-capture and delete domain data', async () =>
   await context.close();
 });
 
+test('clear all removes all local data', async () => {
+  const userDataDir = mkdtempSync(join(tmpdir(), 'table-extract-pw-'));
+  const extensionPath = resolve(process.cwd(), 'dist');
+
+  const context = await chromium.launchPersistentContext(userDataDir, {
+    headless: false,
+    channel: 'chromium',
+    args: [
+      `--disable-extensions-except=${extensionPath}`,
+      `--load-extension=${extensionPath}`,
+      '--no-first-run',
+      '--no-default-browser-check',
+    ],
+  });
+
+  const extensionId = await getExtensionIdFromContext(context);
+  const extensionUrl = `chrome-extension://${extensionId}/index.html`;
+
+  const appPage = await context.newPage();
+  const extPage = await context.newPage();
+
+  const url1 = 'https://example.test/page-1';
+  const html1 = `
+    <html><head><title>Page 1</title></head>
+    <body>
+      <table>
+        <tr><th>Name</th><th>Age</th></tr>
+        <tr><td>Alice</td><td>30</td></tr>
+      </table>
+    </body></html>
+  `;
+
+  await appPage.route('**/*', async (route) => {
+    const reqUrl = route.request().url();
+    if (reqUrl === url1) {
+      await route.fulfill({ status: 200, contentType: 'text/html', body: html1 });
+      return;
+    }
+    if (route.request().resourceType() !== 'document') {
+      await route.abort();
+      return;
+    }
+    await route.fulfill({ status: 404, contentType: 'text/html', body: '<html>not found</html>' });
+  });
+
+  // Store once so there is data to clear.
+  await appPage.goto(url1, { waitUntil: 'domcontentloaded' });
+  await appPage.bringToFront();
+  await extPage.goto(extensionUrl, { waitUntil: 'domcontentloaded' });
+  await expect(extPage.locator('.sqlite-btn')).toBeVisible();
+  await extPage.locator('.sqlite-btn').click();
+  await extPage.waitForTimeout(500);
+  expect(await listExtractionUrlsFromDebug(extPage)).toEqual([url1]);
+
+  // Clear all.
+  await extPage.getByRole('button', { name: 'History' }).click();
+  await expect(extPage.getByText('Lifecycle')).toBeVisible();
+  extPage.once('dialog', (d) => d.accept());
+  await extPage.getByRole('button', { name: 'Clear all local data' }).click();
+  await expect(extPage.getByText('No saved extractions yet.')).toBeVisible();
+
+  // DB should now be empty.
+  const urls = await listExtractionUrlsFromDebug(extPage);
+  expect(urls).toEqual([]);
+  await expect(extPage.getByText('example.test', { exact: true })).toHaveCount(0);
+
+  await context.close();
+});
+

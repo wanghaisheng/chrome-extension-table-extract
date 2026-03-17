@@ -1,5 +1,11 @@
 const DB_STORAGE_KEY = 'table_extract_sqlite_db_v1';
 const ENABLED_DOMAINS_KEY = 'table_extract_sqlite_enabled_domains_v1';
+const RETENTION_POLICY_KEY = 'table_extract_sqlite_retention_policy_v1';
+
+export type RetentionPolicy = {
+  enabled: boolean;
+  keepLastPerDomain: number;
+};
 
 export async function getEnabledDomains(): Promise<Record<string, true>> {
   const res = await chrome.storage.local.get(ENABLED_DOMAINS_KEY);
@@ -24,6 +30,24 @@ export async function setDomainEnabled(domain: string, enabled: boolean): Promis
 export async function isDomainEnabled(domain: string): Promise<boolean> {
   const domains = await getEnabledDomains();
   return Boolean(domains[domain]);
+}
+
+export async function getRetentionPolicy(): Promise<RetentionPolicy> {
+  const res = await chrome.storage.local.get(RETENTION_POLICY_KEY);
+  const raw = res?.[RETENTION_POLICY_KEY] as Partial<RetentionPolicy> | undefined;
+  const keepLast = Number(raw?.keepLastPerDomain ?? 50);
+  return {
+    enabled: Boolean(raw?.enabled ?? false),
+    keepLastPerDomain: Number.isFinite(keepLast) ? keepLast : 50,
+  };
+}
+
+export async function setRetentionPolicy(policy: RetentionPolicy): Promise<void> {
+  await chrome.storage.local.set({ [RETENTION_POLICY_KEY]: policy });
+}
+
+export async function clearSqliteLocalSettings(): Promise<void> {
+  await chrome.storage.local.remove([ENABLED_DOMAINS_KEY, RETENTION_POLICY_KEY, DB_STORAGE_KEY]);
 }
 
 function uint8ToBase64(bytes: Uint8Array): string {

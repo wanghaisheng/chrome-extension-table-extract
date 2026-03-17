@@ -8,8 +8,8 @@ import Preview from './components/preview';
 import LoadingSkeleton from './components/loading-skeleton';
 import { ExceptionMessage } from "./types";
 import History from './components/history';
-import { isDomainEnabled } from './utils/sqlite/storage';
-import { storeExtraction, listExtractionUrls, listRecentExtractions, getExtractionTable } from './utils/sqlite/wa';
+import { getRetentionPolicy, isDomainEnabled } from './utils/sqlite/storage';
+import { applyRetentionKeepLastPerDomain, clearAllData, storeExtraction, listExtractionUrls, listRecentExtractions, getExtractionTable } from './utils/sqlite/wa';
 
 function isResponseIsAnException(response: ExceptionMessage) {
   return response.code >= 0 && typeof response.message === 'string';
@@ -33,6 +33,8 @@ const App: FunctionalComponent = () => {
       listExtractionUrls,
       listRecentExtractions,
       getExtractionTable,
+      applyRetentionKeepLastPerDomain,
+      clearAllData,
     };
 
     chrome.runtime.sendMessage({ action: 'rows-x:scrap' }, (response) => {
@@ -70,6 +72,11 @@ const App: FunctionalComponent = () => {
           }),
         ),
       );
+
+      const policy = await getRetentionPolicy();
+      if (policy.enabled) {
+        await applyRetentionKeepLastPerDomain(policy.keepLastPerDomain);
+      }
 
       console.log('Auto-captured extractions for domain:', domain);
     })().catch((e) => console.warn('Auto-capture to SQLite failed:', e));

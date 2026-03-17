@@ -3,6 +3,7 @@ import * as SQLite from 'wa-sqlite';
 import { IDBMinimalVFS } from 'wa-sqlite/src/examples/IDBMinimalVFS.js';
 
 import { SQLiteExtractPayload } from './types';
+import { computeExtractionIdsToDeleteKeepLastPerDomain } from './retention';
 
 type SQLiteApi = ReturnType<typeof SQLite.Factory>;
 
@@ -350,6 +351,59 @@ export async function deleteDomainData(domain: string): Promise<void> {
     await sqlite3.run(db, `DELETE FROM domains WHERE domain = ?`, [domain]);
 
     await sqlite3.run(db, 'COMMIT');
+  } catch (e) {
+    await sqlite3.run(db, 'ROLLBACK');
+    throw e;
+  }
+}
+
+export async function clearAllData(): Promise<void> {
+  const { sqlite3, db } = await getClient();
+
+  await sqlite3.run(db, 'BEGIN');
+  try {
+    await sqlite3.run(db, `DELETE FROM extraction_cells`);
+    await sqlite3.run(db, `DELETE FROM extractions`);
+    await sqlite3.run(db, `DELETE FROM schema_columns`);
+    await sqlite3.run(db, `DELETE FROM schemas`);
+    await sqlite3.run(db, `DELETE FROM domains`);
+    await sqlite3.run(db, 'COMMIT');
+  } catch (e) {
+    await sqlite3.run(db, 'ROLLBACK');
+    throw e;
+  }
+}
+
+export async function applyRetentionKeepLastPerDomain(keepLastPerDomain: number): Promise<{ deletedExtractions: number }> {
+  const keepN = Math.max(0, Math.floor(keepLastPerDomain));
+  const { sqlite3, db } = await getClient();
+
+  const res = await sqlite3.execWithParams(
+    db,
+    `
+      SELECT e.id, d.domain, e.extracted_at
+      FROM extractions e
+      JOIN schemas s ON s.id = e.schema_id
+      JOIN domains d ON d.id = s.domain_id
+    `,
+  );
+  const items = (res.rows ?? []).map((r: any[]) => ({
+    id: Number(r[0]),
+    domain: String(r[1] ?? ''),
+    extractedAt: Number(r[2] ?? 0),
+  }));
+
+  const idsToDelete = computeExtractionIdsToDeleteKeepLastPerDomain(items, keepN);
+  if (idsToDelete.length === 0) return { deletedExtractions: 0 };
+
+  await sqlite3.run(db, 'BEGIN');
+  try {
+    for (const id of idsToDelete) {
+      await sqlite3.run(db, `DELETE FROM extraction_cells WHERE extraction_id = ?`, [id]);
+      await sqlite3.run(db, `DELETE FROM extractions WHERE id = ?`, [id]);
+    }
+    await sqlite3.run(db, 'COMMIT');
+    return { deletedExtractions: idsToDelete.length };
   } catch (e) {
     await sqlite3.run(db, 'ROLLBACK');
     throw e;

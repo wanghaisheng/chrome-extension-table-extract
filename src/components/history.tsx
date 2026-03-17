@@ -3,8 +3,15 @@ import { useEffect, useMemo, useState } from 'preact/hooks';
 
 import Button from './button';
 import './preview.css';
-import { ExtractionSummary, deleteDomainData, getExtractionTable, listRecentExtractions } from '../utils/sqlite/wa';
-import { listEnabledDomains, setDomainEnabled } from '../utils/sqlite/storage';
+import {
+  ExtractionSummary,
+  applyRetentionKeepLastPerDomain,
+  clearAllData,
+  deleteDomainData,
+  getExtractionTable,
+  listRecentExtractions,
+} from '../utils/sqlite/wa';
+import { clearSqliteLocalSettings, getRetentionPolicy, listEnabledDomains, RetentionPolicy, setDomainEnabled, setRetentionPolicy } from '../utils/sqlite/storage';
 
 type Props = {
   onBack: () => void;
@@ -25,12 +32,15 @@ const History: FunctionComponent<Props> = ({ onBack }) => {
   const [isLoading, setLoading] = useState(true);
   const [enabledDomains, setEnabledDomains] = useState<string[]>([]);
   const [isWorking, setWorking] = useState(false);
+  const [retention, setRetention] = useState<RetentionPolicy>({ enabled: false, keepLastPerDomain: 50 });
+  const [statusMsg, setStatusMsg] = useState<string>('');
 
   useEffect(() => {
-    Promise.all([listRecentExtractions(25), listEnabledDomains()])
-      .then(([extractions, domains]) => {
+    Promise.all([listRecentExtractions(25), listEnabledDomains(), getRetentionPolicy()])
+      .then(([extractions, domains, policy]) => {
         setItems(extractions);
         setEnabledDomains(domains);
+        setRetention(policy);
       })
       .finally(() => setLoading(false));
   }, []);
@@ -47,9 +57,10 @@ const History: FunctionComponent<Props> = ({ onBack }) => {
   const domainsInDb = useMemo(() => Array.from(new Set(items.map((i) => i.domain))).sort(), [items]);
 
   const refresh = async () => {
-    const [extractions, domains] = await Promise.all([listRecentExtractions(25), listEnabledDomains()]);
+    const [extractions, domains, policy] = await Promise.all([listRecentExtractions(25), listEnabledDomains(), getRetentionPolicy()]);
     setItems(extractions);
     setEnabledDomains(domains);
+    setRetention(policy);
   };
 
   const toggleDomain = async (domain: string, enabled: boolean) => {
@@ -67,10 +78,55 @@ const History: FunctionComponent<Props> = ({ onBack }) => {
     if (!ok) return;
     setWorking(true);
     try {
+      setStatusMsg('');
       await deleteDomainData(domain);
       await setDomainEnabled(domain, false);
       await refresh();
       setSelectedId(null);
+    } finally {
+      setWorking(false);
+    }
+  };
+
+  const saveRetention = async (next: RetentionPolicy) => {
+    setWorking(true);
+    try {
+      setStatusMsg('');
+      await setRetentionPolicy(next);
+      await refresh();
+    } finally {
+      setWorking(false);
+    }
+  };
+
+  const applyRetentionNow = async () => {
+    if (!retention.enabled) {
+      setStatusMsg('Retention is disabled.');
+      return;
+    }
+    setWorking(true);
+    try {
+      setStatusMsg('');
+      const res = await applyRetentionKeepLastPerDomain(retention.keepLastPerDomain);
+      await refresh();
+      setStatusMsg(`Retention applied. Deleted ${res.deletedExtractions} extractions.`);
+      setSelectedId(null);
+    } finally {
+      setWorking(false);
+    }
+  };
+
+  const clearAll = async () => {
+    const ok = window.confirm('Clear ALL locally stored data? This cannot be undone.');
+    if (!ok) return;
+    setWorking(true);
+    try {
+      setStatusMsg('');
+      await clearAllData();
+      await clearSqliteLocalSettings();
+      await refresh();
+      setSelectedId(null);
+      setStatusMsg('All local data cleared.');
     } finally {
       setWorking(false);
     }
@@ -85,6 +141,8 @@ const History: FunctionComponent<Props> = ({ onBack }) => {
       <div className="table-actions">
         <Button variant="secondary" onClick={onBack}>Back</Button>
       </div>
+
+      {statusMsg && <div className="pill">{statusMsg}</div>}
 
       <div className="table-preview">
         <div className="table-header">
@@ -114,6 +172,43 @@ const History: FunctionComponent<Props> = ({ onBack }) => {
               );
             })
           )}
+        </div>
+      </div>
+
+      <div className="table-preview">
+        <div className="table-header">
+          <caption className="title">Lifecycle</caption>
+        </div>
+        <div className="table-body">
+          <div className="table-actions">
+            <div className="pill">Retention</div>
+            <Button
+              variant={retention.enabled ? 'secondary' : 'primary'}
+              disabled={isWorking}
+              onClick={() => saveRetention({ ...retention, enabled: !retention.enabled })}
+            >
+              {retention.enabled ? 'Disable retention' : 'Enable retention'}
+            </Button>
+          </div>
+          <div className="table-actions">
+            <div className="pill">Keep last per domain</div>
+            <input
+              style={{ width: '6rem' }}
+              type="number"
+              min={1}
+              value={retention.keepLastPerDomain}
+              disabled={isWorking}
+              onInput={(e: any) => setRetention((p) => ({ ...p, keepLastPerDomain: Number(e.currentTarget?.value ?? 50) }))}
+            />
+            <Button variant="secondary" disabled={isWorking} onClick={applyRetentionNow}>
+              Apply now
+            </Button>
+          </div>
+          <div className="table-actions">
+            <Button variant="secondary" disabled={isWorking} onClick={clearAll}>
+              Clear all local data
+            </Button>
+          </div>
         </div>
       </div>
 

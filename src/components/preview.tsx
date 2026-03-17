@@ -5,8 +5,8 @@ import { FunctionComponent } from 'preact';
 import { useMemo, useState } from 'preact/hooks';
 import { ScrapperResults } from '../utils/chrome';
 import { reportUsage } from '../utils/rows-api/report';
-import { storeExtraction } from '../utils/sqlite/wa';
-import { setDomainEnabled } from '../utils/sqlite/storage';
+import { applyRetentionKeepLastPerDomain, storeExtraction } from '../utils/sqlite/wa';
+import { getRetentionPolicy, setDomainEnabled } from '../utils/sqlite/storage';
 
 interface Props {
   results: ScrapperResults;
@@ -35,6 +35,10 @@ const Preview: FunctionComponent<Props> = ({ results = [] }) => {
       const pageTitle = tabResp.title as string;
       const { extractionId, domain } = await storeExtraction({ url, pageTitle, table: result.table });
       await setDomainEnabled(domain, true);
+      const policy = await getRetentionPolicy();
+      if (policy.enabled) {
+        await applyRetentionKeepLastPerDomain(policy.keepLastPerDomain);
+      }
       console.log('Stored extraction in SQLite:', { extractionId, domain });
       setSqliteStatusByKey((prev) => ({ ...prev, [key]: 'saved' }));
     } catch (error) {
