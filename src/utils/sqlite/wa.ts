@@ -8,6 +8,27 @@ import { computeExtractionIdsToDeleteKeepLastPerDomain } from './retention';
 type SQLiteApi = ReturnType<typeof SQLite.Factory>;
 
 let SQLITE_PROMISE: Promise<{ sqlite3: SQLiteApi; db: number }> | null = null;
+let WRITE_LOCK: Promise<void> = Promise.resolve();
+
+async function withWriteLock<T>(fn: () => Promise<T>): Promise<T> {
+  const prev = WRITE_LOCK;
+  let release!: () => void;
+  WRITE_LOCK = new Promise<void>((r) => (release = r));
+  await prev;
+  try {
+    return await fn();
+  } finally {
+    release();
+  }
+}
+
+async function run(sqlite3: SQLiteApi, db: number, sql: string, params: any[] = []): Promise<void> {
+  await sqlite3.run(db, sql, params);
+}
+
+async function execWithParams(sqlite3: SQLiteApi, db: number, sql: string, params: any[] = []): Promise<any> {
+  return await sqlite3.execWithParams(db, sql, params);
+}
 
 async function getClient(): Promise<{ sqlite3: SQLiteApi; db: number }> {
   if (!SQLITE_PROMISE) {
@@ -70,6 +91,9 @@ async function getClient(): Promise<{ sqlite3: SQLiteApi; db: number }> {
 
         CREATE INDEX IF NOT EXISTS idx_extraction_row_col
           ON extraction_cells (extraction_id, row_index, col_index);
+
+        -- Migration: url_pattern should be non-null for reliable param binding.
+        UPDATE schemas SET url_pattern = '/' WHERE url_pattern IS NULL;
       `);
 
       return { sqlite3, db };
@@ -86,31 +110,52 @@ function getHostname(url: string): string {
   return new URL(url).hostname;
 }
 
+function getUrlPattern(url: string): string {
+  // Heuristic "page type" bucket:
+  // - "/products/123" -> "/products"
+  // - "/users/1/edit" -> "/users"
+  // - shallow paths like "/page-1" -> "/" (avoid per-page buckets)
+  try {
+    const u = new URL(url);
+    const parts = u.pathname.split('/').filter(Boolean);
+    if (parts.length >= 2) return `/${parts[0]}`;
+    return '/';
+  } catch {
+    return '/';
+  }
+}
+
 async function selectFirstInt(sqlite3: SQLiteApi, db: number, sql: string, params?: any[]): Promise<number | null> {
-  const res = await sqlite3.execWithParams(db, sql, params);
+  const res = await execWithParams(sqlite3, db, sql, params ?? []);
   const row = res.rows?.[0];
   if (!row || row[0] == null) return null;
   return Number(row[0]);
 }
 
 async function getOrCreateDomainId(sqlite3: SQLiteApi, db: number, domain: string): Promise<number> {
-  await sqlite3.run(db, `INSERT OR IGNORE INTO domains (domain, created_at) VALUES (?, ?)`, [domain, nowMs()]);
+  await run(sqlite3, db, `INSERT OR IGNORE INTO domains (domain, created_at) VALUES (?, ?)`, [domain, nowMs()]);
   const id = await selectFirstInt(sqlite3, db, `SELECT id FROM domains WHERE domain = ?`, [domain]);
   if (!id) throw new Error(`Failed to load domain id for ${domain}`);
   return id;
 }
 
-async function getActiveSchemaId(sqlite3: SQLiteApi, db: number, domainId: number): Promise<number | null> {
+async function getActiveSchemaId(
+  sqlite3: SQLiteApi,
+  db: number,
+  domainId: number,
+  urlPattern: string,
+): Promise<number | null> {
   return await selectFirstInt(
     sqlite3,
     db,
-    `SELECT id FROM schemas WHERE domain_id = ? AND is_active = 1 ORDER BY version DESC LIMIT 1`,
-    [domainId],
+    `SELECT id FROM schemas WHERE domain_id = ? AND url_pattern = ? AND is_active = 1 ORDER BY version DESC LIMIT 1`,
+    [domainId, urlPattern],
   );
 }
 
 async function readSchemaHeaders(sqlite3: SQLiteApi, db: number, schemaId: number): Promise<string[]> {
-  const res = await sqlite3.execWithParams(
+  const res = await execWithParams(
+    sqlite3,
     db,
     `SELECT name FROM schema_columns WHERE schema_id = ? ORDER BY col_index ASC`,
     [schemaId],
@@ -118,26 +163,40 @@ async function readSchemaHeaders(sqlite3: SQLiteApi, db: number, schemaId: numbe
   return (res.rows ?? []).map((r: any[]) => String(r[0] ?? ''));
 }
 
-async function createSchema(sqlite3: SQLiteApi, db: number, domainId: number, headers: string[]): Promise<number> {
+async function createSchema(
+  sqlite3: SQLiteApi,
+  db: number,
+  domainId: number,
+  urlPattern: string,
+  headers: string[],
+): Promise<number> {
   const nextVersion =
-    (await selectFirstInt(sqlite3, db, `SELECT COALESCE(MAX(version), 0) + 1 FROM schemas WHERE domain_id = ?`, [domainId])) ??
+    (await selectFirstInt(
+      sqlite3,
+      db,
+      `SELECT COALESCE(MAX(version), 0) + 1 FROM schemas WHERE domain_id = ? AND url_pattern = ?`,
+      [domainId, urlPattern],
+    )) ??
     1;
 
-  await sqlite3.run(db, `UPDATE schemas SET is_active = 0 WHERE domain_id = ?`, [domainId]);
-  await sqlite3.run(db, `INSERT INTO schemas (domain_id, version, created_at, is_active) VALUES (?, ?, ?, 1)`, [
-    domainId,
-    nextVersion,
-    nowMs(),
-  ]);
+  await run(sqlite3, db, `UPDATE schemas SET is_active = 0 WHERE domain_id = ? AND url_pattern = ?`, [domainId, urlPattern]);
+  await run(
+    sqlite3,
+    db,
+    `INSERT INTO schemas (domain_id, url_pattern, version, created_at, is_active) VALUES (?, ?, ?, ?, 1)`,
+    [domainId, urlPattern, nextVersion, nowMs()],
+  );
 
-  const schemaId = await selectFirstInt(sqlite3, db, `SELECT id FROM schemas WHERE domain_id = ? AND version = ?`, [
-    domainId,
-    nextVersion,
-  ]);
+  const schemaId = await selectFirstInt(
+    sqlite3,
+    db,
+    `SELECT id FROM schemas WHERE domain_id = ? AND url_pattern = ? AND version = ?`,
+    [domainId, urlPattern, nextVersion],
+  );
   if (!schemaId) throw new Error('Failed to create schema');
 
   for (let i = 0; i < headers.length; i++) {
-    await sqlite3.run(db, `INSERT INTO schema_columns (schema_id, col_index, name, data_type) VALUES (?, ?, ?, 'text')`, [
+    await run(sqlite3, db, `INSERT INTO schema_columns (schema_id, col_index, name, data_type) VALUES (?, ?, ?, 'text')`, [
       schemaId,
       i,
       headers[i],
@@ -153,56 +212,67 @@ function headersEqual(a: string[], b: string[]): boolean {
   return true;
 }
 
-async function getOrCreateSchemaId(sqlite3: SQLiteApi, db: number, domainId: number, headers: string[]): Promise<number> {
-  const activeSchemaId = await getActiveSchemaId(sqlite3, db, domainId);
-  if (!activeSchemaId) return await createSchema(sqlite3, db, domainId, headers);
+async function getOrCreateSchemaId(
+  sqlite3: SQLiteApi,
+  db: number,
+  domainId: number,
+  urlPattern: string,
+  headers: string[],
+): Promise<number> {
+  const activeSchemaId = await getActiveSchemaId(sqlite3, db, domainId, urlPattern);
+  if (!activeSchemaId) return await createSchema(sqlite3, db, domainId, urlPattern, headers);
 
   const existing = await readSchemaHeaders(sqlite3, db, activeSchemaId);
   if (headersEqual(existing, headers)) return activeSchemaId;
-  return await createSchema(sqlite3, db, domainId, headers);
+  return await createSchema(sqlite3, db, domainId, urlPattern, headers);
 }
 
 export async function storeExtraction(payload: SQLiteExtractPayload): Promise<{ extractionId: number; domain: string }> {
-  const { sqlite3, db } = await getClient();
+  return await withWriteLock(async () => {
+    const { sqlite3, db } = await getClient();
 
-  await sqlite3.run(db, 'BEGIN');
-  try {
-    const domain = getHostname(payload.url);
-    const domainId = await getOrCreateDomainId(sqlite3, db, domain);
-    const headers = payload.table[0] ?? [];
-    const schemaId = await getOrCreateSchemaId(sqlite3, db, domainId, headers);
+    await run(sqlite3, db, 'BEGIN');
+    try {
+      const domain = getHostname(payload.url);
+      const urlPattern = getUrlPattern(payload.url);
+      const domainId = await getOrCreateDomainId(sqlite3, db, domain);
+      const headers = payload.table[0] ?? [];
+      const schemaId = await getOrCreateSchemaId(sqlite3, db, domainId, urlPattern, headers);
 
-    const rowCount = Math.max(0, payload.table.length - 1);
-    await sqlite3.run(
-      db,
-      `INSERT INTO extractions (schema_id, url, page_title, extracted_at, row_count) VALUES (?, ?, ?, ?, ?)`,
-      [schemaId, payload.url, payload.pageTitle ?? null, nowMs(), rowCount],
-    );
-    const extractionId = await selectFirstInt(sqlite3, db, `SELECT last_insert_rowid()`);
-    if (!extractionId) throw new Error('Failed to insert extraction');
+      const rowCount = Math.max(0, payload.table.length - 1);
+      await run(
+        sqlite3,
+        db,
+        `INSERT INTO extractions (schema_id, url, page_title, extracted_at, row_count) VALUES (?, ?, ?, ?, ?)`,
+        [schemaId, payload.url, payload.pageTitle ?? null, nowMs(), rowCount],
+      );
+      const extractionId = await selectFirstInt(sqlite3, db, `SELECT last_insert_rowid()`, []);
+      if (!extractionId) throw new Error('Failed to insert extraction');
 
-    const rows = payload.table.slice(1);
-    for (let r = 0; r < rows.length; r++) {
-      for (let c = 0; c < rows[r].length; c++) {
-        await sqlite3.run(
-          db,
-          `INSERT INTO extraction_cells (extraction_id, row_index, col_index, value) VALUES (?, ?, ?, ?)`,
-          [extractionId, r, c, rows[r][c] ?? null],
-        );
+      const rows = payload.table.slice(1);
+      for (let r = 0; r < rows.length; r++) {
+        for (let c = 0; c < rows[r].length; c++) {
+          await run(
+            sqlite3,
+            db,
+            `INSERT INTO extraction_cells (extraction_id, row_index, col_index, value) VALUES (?, ?, ?, ?)`,
+            [extractionId, r, c, rows[r][c] ?? null],
+          );
+        }
       }
-    }
 
-    await sqlite3.run(db, 'COMMIT');
-    return { extractionId, domain };
-  } catch (e) {
-    await sqlite3.run(db, 'ROLLBACK');
-    throw e;
-  }
+      await run(sqlite3, db, 'COMMIT');
+      return { extractionId, domain };
+    } catch (e) {
+      await run(sqlite3, db, 'ROLLBACK');
+      throw e;
+    }
+  });
 }
 
 export async function listExtractionUrls(): Promise<string[]> {
   const { sqlite3, db } = await getClient();
-  const res = await sqlite3.execWithParams(db, `SELECT url FROM extractions ORDER BY id ASC`);
+  const res = await execWithParams(sqlite3, db, `SELECT url FROM extractions ORDER BY id ASC`, []);
   return (res.rows ?? []).map((r: any[]) => String(r[0] ?? ''));
 }
 
@@ -210,6 +280,7 @@ export type ExtractionSummary = {
   id: number;
   domain: string;
   url: string;
+  urlPattern?: string;
   pageTitle?: string;
   extractedAt: number;
   rowCount: number;
@@ -221,6 +292,7 @@ export type ExtractionFilters = {
   urlSubstring?: string;
   extractedAfter?: number; // ms epoch inclusive
   extractedBefore?: number; // ms epoch inclusive
+  urlPattern?: string;
   schemaVersion?: number;
 };
 
@@ -253,13 +325,15 @@ export async function listExtractions(filters: ExtractionFilters = {}, limit = 5
 
   const whereSql = where.length ? `WHERE ${where.join(' AND ')}` : '';
 
-  const res = await sqlite3.execWithParams(
+  const res = await execWithParams(
+    sqlite3,
     db,
     `
       SELECT
         e.id,
         d.domain,
         e.url,
+        s.url_pattern,
         e.page_title,
         e.extracted_at,
         e.row_count,
@@ -278,10 +352,11 @@ export async function listExtractions(filters: ExtractionFilters = {}, limit = 5
     id: Number(r[0]),
     domain: String(r[1] ?? ''),
     url: String(r[2] ?? ''),
-    pageTitle: r[3] == null ? undefined : String(r[3]),
-    extractedAt: Number(r[4]),
-    rowCount: Number(r[5]),
-    schemaVersion: Number(r[6]),
+    urlPattern: r[3] == null ? undefined : String(r[3]),
+    pageTitle: r[4] == null ? undefined : String(r[4]),
+    extractedAt: Number(r[5]),
+    rowCount: Number(r[6]),
+    schemaVersion: Number(r[7]),
   }));
 }
 
@@ -303,13 +378,15 @@ export async function listDomainSchemaVersions(domain: string): Promise<number[]
 
 export async function listRecentExtractions(limit = 25): Promise<ExtractionSummary[]> {
   const { sqlite3, db } = await getClient();
-  const res = await sqlite3.execWithParams(
+  const res = await execWithParams(
+    sqlite3,
     db,
     `
       SELECT
         e.id,
         d.domain,
         e.url,
+        s.url_pattern,
         e.page_title,
         e.extracted_at,
         e.row_count,
@@ -327,21 +404,23 @@ export async function listRecentExtractions(limit = 25): Promise<ExtractionSumma
     id: Number(r[0]),
     domain: String(r[1] ?? ''),
     url: String(r[2] ?? ''),
-    pageTitle: r[3] == null ? undefined : String(r[3]),
-    extractedAt: Number(r[4]),
-    rowCount: Number(r[5]),
-    schemaVersion: Number(r[6]),
+    urlPattern: r[3] == null ? undefined : String(r[3]),
+    pageTitle: r[4] == null ? undefined : String(r[4]),
+    extractedAt: Number(r[5]),
+    rowCount: Number(r[6]),
+    schemaVersion: Number(r[7]),
   }));
 }
 
 export async function getExtractionTable(extractionId: number, maxRows: number | undefined = 20): Promise<string[][]> {
   const { sqlite3, db } = await getClient();
 
-  const schemaRes = await sqlite3.execWithParams(db, `SELECT schema_id FROM extractions WHERE id = ?`, [extractionId]);
+  const schemaRes = await execWithParams(sqlite3, db, `SELECT schema_id FROM extractions WHERE id = ?`, [extractionId]);
   const schemaId = schemaRes.rows?.[0]?.[0];
   if (!schemaId) throw new Error(`Extraction not found: ${extractionId}`);
 
-  const headersRes = await sqlite3.execWithParams(
+  const headersRes = await execWithParams(
+    sqlite3,
     db,
     `SELECT name FROM schema_columns WHERE schema_id = ? ORDER BY col_index ASC`,
     [schemaId],
@@ -349,7 +428,8 @@ export async function getExtractionTable(extractionId: number, maxRows: number |
   const headers = (headersRes.rows ?? []).map((r: any[]) => String(r[0] ?? ''));
 
   const hasLimit = typeof maxRows === 'number' && Number.isFinite(maxRows);
-  const cellsRes = await sqlite3.execWithParams(
+  const cellsRes = await execWithParams(
+    sqlite3,
     db,
     hasLimit
       ? `
@@ -394,10 +474,11 @@ export async function getExtractionTable(extractionId: number, maxRows: number |
 export async function deleteDomainData(domain: string): Promise<void> {
   const { sqlite3, db } = await getClient();
 
-  await sqlite3.run(db, 'BEGIN');
+  await run(sqlite3, db, 'BEGIN');
   try {
     // Delete cells and extractions first to satisfy foreign keys.
-    await sqlite3.run(
+    await run(
+      sqlite3,
       db,
       `
         DELETE FROM extraction_cells
@@ -412,7 +493,8 @@ export async function deleteDomainData(domain: string): Promise<void> {
       [domain],
     );
 
-    await sqlite3.run(
+    await run(
+      sqlite3,
       db,
       `
         DELETE FROM extractions
@@ -426,7 +508,8 @@ export async function deleteDomainData(domain: string): Promise<void> {
       [domain],
     );
 
-    await sqlite3.run(
+    await run(
+      sqlite3,
       db,
       `
         DELETE FROM schema_columns
@@ -440,12 +523,12 @@ export async function deleteDomainData(domain: string): Promise<void> {
       [domain],
     );
 
-    await sqlite3.run(db, `DELETE FROM schemas WHERE domain_id = (SELECT id FROM domains WHERE domain = ?)`, [domain]);
-    await sqlite3.run(db, `DELETE FROM domains WHERE domain = ?`, [domain]);
+    await run(sqlite3, db, `DELETE FROM schemas WHERE domain_id = (SELECT id FROM domains WHERE domain = ?)`, [domain]);
+    await run(sqlite3, db, `DELETE FROM domains WHERE domain = ?`, [domain]);
 
-    await sqlite3.run(db, 'COMMIT');
+    await run(sqlite3, db, 'COMMIT');
   } catch (e) {
-    await sqlite3.run(db, 'ROLLBACK');
+    await run(sqlite3, db, 'ROLLBACK');
     throw e;
   }
 }
@@ -453,16 +536,16 @@ export async function deleteDomainData(domain: string): Promise<void> {
 export async function clearAllData(): Promise<void> {
   const { sqlite3, db } = await getClient();
 
-  await sqlite3.run(db, 'BEGIN');
+  await run(sqlite3, db, 'BEGIN');
   try {
-    await sqlite3.run(db, `DELETE FROM extraction_cells`);
-    await sqlite3.run(db, `DELETE FROM extractions`);
-    await sqlite3.run(db, `DELETE FROM schema_columns`);
-    await sqlite3.run(db, `DELETE FROM schemas`);
-    await sqlite3.run(db, `DELETE FROM domains`);
-    await sqlite3.run(db, 'COMMIT');
+    await run(sqlite3, db, `DELETE FROM extraction_cells`);
+    await run(sqlite3, db, `DELETE FROM extractions`);
+    await run(sqlite3, db, `DELETE FROM schema_columns`);
+    await run(sqlite3, db, `DELETE FROM schemas`);
+    await run(sqlite3, db, `DELETE FROM domains`);
+    await run(sqlite3, db, 'COMMIT');
   } catch (e) {
-    await sqlite3.run(db, 'ROLLBACK');
+    await run(sqlite3, db, 'ROLLBACK');
     throw e;
   }
 }
@@ -471,7 +554,8 @@ export async function applyRetentionKeepLastPerDomain(keepLastPerDomain: number)
   const keepN = Math.max(0, Math.floor(keepLastPerDomain));
   const { sqlite3, db } = await getClient();
 
-  const res = await sqlite3.execWithParams(
+  const res = await execWithParams(
+    sqlite3,
     db,
     `
       SELECT e.id, d.domain, e.extracted_at
@@ -479,6 +563,7 @@ export async function applyRetentionKeepLastPerDomain(keepLastPerDomain: number)
       JOIN schemas s ON s.id = e.schema_id
       JOIN domains d ON d.id = s.domain_id
     `,
+    [],
   );
   const items = (res.rows ?? []).map((r: any[]) => ({
     id: Number(r[0]),
@@ -489,16 +574,16 @@ export async function applyRetentionKeepLastPerDomain(keepLastPerDomain: number)
   const idsToDelete = computeExtractionIdsToDeleteKeepLastPerDomain(items, keepN);
   if (idsToDelete.length === 0) return { deletedExtractions: 0 };
 
-  await sqlite3.run(db, 'BEGIN');
+  await run(sqlite3, db, 'BEGIN');
   try {
     for (const id of idsToDelete) {
-      await sqlite3.run(db, `DELETE FROM extraction_cells WHERE extraction_id = ?`, [id]);
-      await sqlite3.run(db, `DELETE FROM extractions WHERE id = ?`, [id]);
+      await run(sqlite3, db, `DELETE FROM extraction_cells WHERE extraction_id = ?`, [id]);
+      await run(sqlite3, db, `DELETE FROM extractions WHERE id = ?`, [id]);
     }
-    await sqlite3.run(db, 'COMMIT');
+    await run(sqlite3, db, 'COMMIT');
     return { deletedExtractions: idsToDelete.length };
   } catch (e) {
-    await sqlite3.run(db, 'ROLLBACK');
+    await run(sqlite3, db, 'ROLLBACK');
     throw e;
   }
 }

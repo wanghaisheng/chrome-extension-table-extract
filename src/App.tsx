@@ -35,6 +35,7 @@ const App: FunctionalComponent = () => {
       getExtractionTable,
       applyRetentionKeepLastPerDomain,
       clearAllData,
+      storeExtraction,
     };
 
     chrome.runtime.sendMessage({ action: 'rows-x:scrap' }, (response) => {
