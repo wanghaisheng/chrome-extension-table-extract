@@ -8,6 +8,7 @@
 * add History view for recent extractions with detail preview
 * add domain controls (enable/disable auto-capture) and per-domain delete
 * add optional retention policy (keep last N per domain) and clear-all lifecycle action
+* scope schema versioning by URL pattern buckets (e.g. `/products/*` vs `/users/*`) to avoid cross-page-type bumps
 
 ### Testing
 

@@ -266,6 +266,9 @@ test('manual opt-in enables domain auto-capture on subsequent URLs', async () =>
 
   // Filters: narrow to products/2 only.
   await extPage.getByPlaceholder('example.com').fill('example.test');
+  const patternSelect1 = extPage.getByTestId('filter-pattern');
+  await expect(patternSelect1.locator('option', { hasText: '/products' })).toHaveCount(1);
+  await patternSelect1.selectOption('/products');
   await extPage.getByPlaceholder('/path').fill('products/2');
   await extPage.getByRole('button', { name: 'Apply filters' }).click();
   await expect(extPage.getByText(url2)).toBeVisible();
@@ -300,6 +303,10 @@ test('manual opt-in enables domain auto-capture on subsequent URLs', async () =>
   // Schema pinning: pin active schema for /products bucket and ensure products URLs remain visible.
   await extPage.getByPlaceholder('example.com').fill('example.test');
   await extPage.getByPlaceholder('/path').fill('');
+  // Pick the /products bucket in the Pattern selector.
+  const patternSelect2 = extPage.getByTestId('filter-pattern');
+  await expect(patternSelect2.locator('option', { hasText: '/products' })).toHaveCount(1);
+  await patternSelect2.selectOption('/products');
   await extPage.getByRole('button', { name: 'Pin active schema' }).click();
   await extPage.getByRole('button', { name: 'Apply filters' }).click();
   await expect(extPage.getByText(url2).first()).toBeVisible();

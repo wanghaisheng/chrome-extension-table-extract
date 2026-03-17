@@ -10,7 +10,7 @@ import {
   deleteDomainData,
   getExtractionTable,
   listExtractions,
-  listDomainSchemaVersions,
+  listDomainSchemaVersionsForPattern,
   listRecentExtractions,
 } from '../utils/sqlite/wa';
 import {
@@ -50,6 +50,7 @@ const History: FunctionComponent<Props> = ({ onBack }) => {
   const [filterUrl, setFilterUrl] = useState<string>('');
   const [filterAfter, setFilterAfter] = useState<string>(''); // yyyy-mm-dd
   const [filterBefore, setFilterBefore] = useState<string>(''); // yyyy-mm-dd
+  const [filterPattern, setFilterPattern] = useState<string>('/');
   const [filterSchemaVersion, setFilterSchemaVersion] = useState<string>(''); // number string
   const [domainSchemaVersions, setDomainSchemaVersions] = useState<number[]>([]);
   const [pinnedSchemaVersion, setPinnedSchema] = useState<number | null>(null);
@@ -71,7 +72,19 @@ const History: FunctionComponent<Props> = ({ onBack }) => {
       setPinnedSchema(null);
       return;
     }
-    Promise.all([listDomainSchemaVersions(d), getPinnedSchemaVersion(d)])
+    getPinnedSchemaVersion(d, filterPattern)
+      .then((pinned) => setPinnedSchema(pinned))
+      .catch(() => setPinnedSchema(null));
+  }, [filterDomain]);
+
+  useEffect(() => {
+    const d = filterDomain.trim();
+    if (!d) {
+      setDomainSchemaVersions([]);
+      setPinnedSchema(null);
+      return;
+    }
+    Promise.all([listDomainSchemaVersionsForPattern(d, filterPattern), getPinnedSchemaVersion(d, filterPattern)])
       .then(([versions, pinned]) => {
         setDomainSchemaVersions(versions);
         setPinnedSchema(pinned);
@@ -80,7 +93,7 @@ const History: FunctionComponent<Props> = ({ onBack }) => {
         setDomainSchemaVersions([]);
         setPinnedSchema(null);
       });
-  }, [filterDomain]);
+  }, [filterDomain, filterPattern]);
 
   useEffect(() => {
     if (!selectedId) {
@@ -92,6 +105,24 @@ const History: FunctionComponent<Props> = ({ onBack }) => {
 
   const selected = useMemo(() => items.find((i) => i.id === selectedId) ?? null, [items, selectedId]);
   const domainsInDb = useMemo(() => Array.from(new Set(items.map((i) => i.domain))).sort(), [items]);
+  const patternsForDomain = useMemo(() => {
+    const d = filterDomain.trim();
+    if (!d) return ['/'];
+    const ps = Array.from(
+      new Set(items.filter((i) => i.domain === d).map((i) => String(i.urlPattern ?? '/'))),
+    )
+      .filter(Boolean)
+      .sort();
+    return ps.length ? ps : ['/'];
+  }, [items, filterDomain]);
+
+  useEffect(() => {
+    if (!filterDomain.trim()) {
+      setFilterPattern('/');
+      return;
+    }
+    if (!patternsForDomain.includes(filterPattern)) setFilterPattern(patternsForDomain[0] ?? '/');
+  }, [filterDomain, patternsForDomain]);
 
   const refresh = async () => {
     const [extractions, domains, policy] = await Promise.all([listRecentExtractions(25), listEnabledDomains(), getRetentionPolicy()]);
@@ -115,6 +146,7 @@ const History: FunctionComponent<Props> = ({ onBack }) => {
           urlSubstring: filterUrl.trim() || undefined,
           extractedAfter: afterMs,
           extractedBefore: beforeMs,
+          urlPattern: filterDomain.trim() ? filterPattern : undefined,
           schemaVersion,
         },
         50,
@@ -131,6 +163,7 @@ const History: FunctionComponent<Props> = ({ onBack }) => {
     setFilterUrl('');
     setFilterAfter('');
     setFilterBefore('');
+    setFilterPattern('/');
     setFilterSchemaVersion('');
     await refresh();
   };
@@ -141,8 +174,8 @@ const History: FunctionComponent<Props> = ({ onBack }) => {
     setWorking(true);
     try {
       setStatusMsg('');
-      await setPinnedSchemaVersion(d, version);
-      const pinned = await getPinnedSchemaVersion(d);
+      await setPinnedSchemaVersion(d, filterPattern, version);
+      const pinned = await getPinnedSchemaVersion(d, filterPattern);
       setPinnedSchema(pinned);
       setStatusMsg(version == null ? 'Cleared pinned schema.' : `Pinned schema v${version} for ${d}.`);
     } finally {
@@ -305,6 +338,20 @@ const History: FunctionComponent<Props> = ({ onBack }) => {
           <div className="table-actions">
             <div className="pill">Schema</div>
             <select
+              data-testid="filter-pattern"
+              style={{ width: '10rem' }}
+              value={filterPattern}
+              disabled={isWorking || !filterDomain.trim()}
+              onInput={(e: any) => setFilterPattern(String(e.currentTarget?.value ?? '/'))}
+            >
+              {patternsForDomain.map((p) => (
+                <option value={p} key={p}>
+                  {p}
+                </option>
+              ))}
+            </select>
+            <select
+              data-testid="filter-schema-version"
               style={{ width: '12rem' }}
               value={filterSchemaVersion}
               disabled={isWorking || !filterDomain.trim()}

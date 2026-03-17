@@ -8,12 +8,12 @@ import { computeExtractionIdsToDeleteKeepLastPerDomain } from './retention';
 type SQLiteApi = ReturnType<typeof SQLite.Factory>;
 
 let SQLITE_PROMISE: Promise<{ sqlite3: SQLiteApi; db: number }> | null = null;
-let WRITE_LOCK: Promise<void> = Promise.resolve();
+let DB_LOCK: Promise<void> = Promise.resolve();
 
-async function withWriteLock<T>(fn: () => Promise<T>): Promise<T> {
-  const prev = WRITE_LOCK;
+async function withDbLock<T>(fn: () => Promise<T>): Promise<T> {
+  const prev = DB_LOCK;
   let release!: () => void;
-  WRITE_LOCK = new Promise<void>((r) => (release = r));
+  DB_LOCK = new Promise<void>((r) => (release = r));
   await prev;
   try {
     return await fn();
@@ -228,7 +228,7 @@ async function getOrCreateSchemaId(
 }
 
 export async function storeExtraction(payload: SQLiteExtractPayload): Promise<{ extractionId: number; domain: string }> {
-  return await withWriteLock(async () => {
+  return await withDbLock(async () => {
     const { sqlite3, db } = await getClient();
 
     await run(sqlite3, db, 'BEGIN');
@@ -271,9 +271,11 @@ export async function storeExtraction(payload: SQLiteExtractPayload): Promise<{ 
 }
 
 export async function listExtractionUrls(): Promise<string[]> {
-  const { sqlite3, db } = await getClient();
-  const res = await execWithParams(sqlite3, db, `SELECT url FROM extractions ORDER BY id ASC`, []);
-  return (res.rows ?? []).map((r: any[]) => String(r[0] ?? ''));
+  return await withDbLock(async () => {
+    const { sqlite3, db } = await getClient();
+    const res = await execWithParams(sqlite3, db, `SELECT url FROM extractions ORDER BY id ASC`, []);
+    return (res.rows ?? []).map((r: any[]) => String(r[0] ?? ''));
+  });
 }
 
 export type ExtractionSummary = {
@@ -297,10 +299,11 @@ export type ExtractionFilters = {
 };
 
 export async function listExtractions(filters: ExtractionFilters = {}, limit = 50): Promise<ExtractionSummary[]> {
-  const { sqlite3, db } = await getClient();
+  return await withDbLock(async () => {
+    const { sqlite3, db } = await getClient();
 
-  const where: string[] = [];
-  const params: any[] = [];
+    const where: string[] = [];
+    const params: any[] = [];
 
   if (filters.domain) {
     where.push(`d.domain = ?`);
@@ -318,17 +321,21 @@ export async function listExtractions(filters: ExtractionFilters = {}, limit = 5
     where.push(`e.extracted_at <= ?`);
     params.push(filters.extractedBefore);
   }
+  if (filters.urlPattern) {
+    where.push(`s.url_pattern = ?`);
+    params.push(filters.urlPattern);
+  }
   if (typeof filters.schemaVersion === 'number') {
     where.push(`s.version = ?`);
     params.push(filters.schemaVersion);
   }
 
-  const whereSql = where.length ? `WHERE ${where.join(' AND ')}` : '';
+    const whereSql = where.length ? `WHERE ${where.join(' AND ')}` : '';
 
-  const res = await execWithParams(
-    sqlite3,
-    db,
-    `
+    const res = await execWithParams(
+      sqlite3,
+      db,
+      `
       SELECT
         e.id,
         d.domain,
@@ -345,43 +352,86 @@ export async function listExtractions(filters: ExtractionFilters = {}, limit = 5
       ORDER BY e.extracted_at DESC, e.id DESC
       LIMIT ?
     `,
-    [...params, limit],
-  );
+      [...params, limit],
+    );
 
-  return (res.rows ?? []).map((r: any[]) => ({
-    id: Number(r[0]),
-    domain: String(r[1] ?? ''),
-    url: String(r[2] ?? ''),
-    urlPattern: r[3] == null ? undefined : String(r[3]),
-    pageTitle: r[4] == null ? undefined : String(r[4]),
-    extractedAt: Number(r[5]),
-    rowCount: Number(r[6]),
-    schemaVersion: Number(r[7]),
-  }));
+    return (res.rows ?? []).map((r: any[]) => ({
+      id: Number(r[0]),
+      domain: String(r[1] ?? ''),
+      url: String(r[2] ?? ''),
+      urlPattern: r[3] == null ? undefined : String(r[3]),
+      pageTitle: r[4] == null ? undefined : String(r[4]),
+      extractedAt: Number(r[5]),
+      rowCount: Number(r[6]),
+      schemaVersion: Number(r[7]),
+    }));
+  });
 }
 
 export async function listDomainSchemaVersions(domain: string): Promise<number[]> {
-  const { sqlite3, db } = await getClient();
-  const res = await sqlite3.execWithParams(
-    db,
-    `
+  return await withDbLock(async () => {
+    const { sqlite3, db } = await getClient();
+    const res = await execWithParams(
+      sqlite3,
+      db,
+      `
       SELECT DISTINCT s.version
       FROM schemas s
       JOIN domains d ON d.id = s.domain_id
-      WHERE d.domain = ?
+      WHERE d.domain = ? AND s.url_pattern = ?
       ORDER BY s.version DESC
     `,
-    [domain],
-  );
-  return (res.rows ?? []).map((r: any[]) => Number(r[0])).filter((n: any) => Number.isFinite(n));
+      [domain, '/'],
+    );
+    return (res.rows ?? []).map((r: any[]) => Number(r[0])).filter((n: any) => Number.isFinite(n));
+  });
+}
+
+export async function listDomainUrlPatterns(domain: string): Promise<string[]> {
+  return await withDbLock(async () => {
+    const { sqlite3, db } = await getClient();
+    const res = await execWithParams(
+      sqlite3,
+      db,
+      `
+      SELECT DISTINCT s.url_pattern
+      FROM schemas s
+      JOIN domains d ON d.id = s.domain_id
+      WHERE d.domain = ?
+      ORDER BY s.url_pattern ASC
+    `,
+      [domain],
+    );
+    return (res.rows ?? []).map((r: any[]) => String(r[0] ?? '/')).filter(Boolean);
+  });
+}
+
+export async function listDomainSchemaVersionsForPattern(domain: string, urlPattern: string): Promise<number[]> {
+  return await withDbLock(async () => {
+    const { sqlite3, db } = await getClient();
+    const res = await execWithParams(
+      sqlite3,
+      db,
+      `
+      SELECT DISTINCT s.version
+      FROM schemas s
+      JOIN domains d ON d.id = s.domain_id
+      WHERE d.domain = ? AND s.url_pattern = ?
+      ORDER BY s.version DESC
+    `,
+      [domain, urlPattern || '/'],
+    );
+    return (res.rows ?? []).map((r: any[]) => Number(r[0])).filter((n: any) => Number.isFinite(n));
+  });
 }
 
 export async function listRecentExtractions(limit = 25): Promise<ExtractionSummary[]> {
-  const { sqlite3, db } = await getClient();
-  const res = await execWithParams(
-    sqlite3,
-    db,
-    `
+  return await withDbLock(async () => {
+    const { sqlite3, db } = await getClient();
+    const res = await execWithParams(
+      sqlite3,
+      db,
+      `
       SELECT
         e.id,
         d.domain,
@@ -397,23 +447,25 @@ export async function listRecentExtractions(limit = 25): Promise<ExtractionSumma
       ORDER BY e.extracted_at DESC, e.id DESC
       LIMIT ?
     `,
-    [limit],
-  );
+      [limit],
+    );
 
-  return (res.rows ?? []).map((r: any[]) => ({
-    id: Number(r[0]),
-    domain: String(r[1] ?? ''),
-    url: String(r[2] ?? ''),
-    urlPattern: r[3] == null ? undefined : String(r[3]),
-    pageTitle: r[4] == null ? undefined : String(r[4]),
-    extractedAt: Number(r[5]),
-    rowCount: Number(r[6]),
-    schemaVersion: Number(r[7]),
-  }));
+    return (res.rows ?? []).map((r: any[]) => ({
+      id: Number(r[0]),
+      domain: String(r[1] ?? ''),
+      url: String(r[2] ?? ''),
+      urlPattern: r[3] == null ? undefined : String(r[3]),
+      pageTitle: r[4] == null ? undefined : String(r[4]),
+      extractedAt: Number(r[5]),
+      rowCount: Number(r[6]),
+      schemaVersion: Number(r[7]),
+    }));
+  });
 }
 
 export async function getExtractionTable(extractionId: number, maxRows: number | undefined = 20): Promise<string[][]> {
-  const { sqlite3, db } = await getClient();
+  return await withDbLock(async () => {
+    const { sqlite3, db } = await getClient();
 
   const schemaRes = await execWithParams(sqlite3, db, `SELECT schema_id FROM extractions WHERE id = ?`, [extractionId]);
   const schemaId = schemaRes.rows?.[0]?.[0];
@@ -468,19 +520,21 @@ export async function getExtractionTable(extractionId: number, maxRows: number |
     dataRows.push(row);
   }
 
-  return [headers, ...dataRows];
+    return [headers, ...dataRows];
+  });
 }
 
 export async function deleteDomainData(domain: string): Promise<void> {
-  const { sqlite3, db } = await getClient();
+  return await withDbLock(async () => {
+    const { sqlite3, db } = await getClient();
 
-  await run(sqlite3, db, 'BEGIN');
-  try {
-    // Delete cells and extractions first to satisfy foreign keys.
-    await run(
-      sqlite3,
-      db,
-      `
+    await run(sqlite3, db, 'BEGIN');
+    try {
+      // Delete cells and extractions first to satisfy foreign keys.
+      await run(
+        sqlite3,
+        db,
+        `
         DELETE FROM extraction_cells
         WHERE extraction_id IN (
           SELECT e.id
@@ -490,13 +544,13 @@ export async function deleteDomainData(domain: string): Promise<void> {
           WHERE d.domain = ?
         )
       `,
-      [domain],
-    );
+        [domain],
+      );
 
-    await run(
-      sqlite3,
-      db,
-      `
+      await run(
+        sqlite3,
+        db,
+        `
         DELETE FROM extractions
         WHERE schema_id IN (
           SELECT s.id
@@ -505,13 +559,13 @@ export async function deleteDomainData(domain: string): Promise<void> {
           WHERE d.domain = ?
         )
       `,
-      [domain],
-    );
+        [domain],
+      );
 
-    await run(
-      sqlite3,
-      db,
-      `
+      await run(
+        sqlite3,
+        db,
+        `
         DELETE FROM schema_columns
         WHERE schema_id IN (
           SELECT s.id
@@ -520,71 +574,76 @@ export async function deleteDomainData(domain: string): Promise<void> {
           WHERE d.domain = ?
         )
       `,
-      [domain],
-    );
+        [domain],
+      );
 
-    await run(sqlite3, db, `DELETE FROM schemas WHERE domain_id = (SELECT id FROM domains WHERE domain = ?)`, [domain]);
-    await run(sqlite3, db, `DELETE FROM domains WHERE domain = ?`, [domain]);
+      await run(sqlite3, db, `DELETE FROM schemas WHERE domain_id = (SELECT id FROM domains WHERE domain = ?)`, [domain]);
+      await run(sqlite3, db, `DELETE FROM domains WHERE domain = ?`, [domain]);
 
-    await run(sqlite3, db, 'COMMIT');
-  } catch (e) {
-    await run(sqlite3, db, 'ROLLBACK');
-    throw e;
-  }
+      await run(sqlite3, db, 'COMMIT');
+    } catch (e) {
+      await run(sqlite3, db, 'ROLLBACK');
+      throw e;
+    }
+  });
 }
 
 export async function clearAllData(): Promise<void> {
-  const { sqlite3, db } = await getClient();
+  return await withDbLock(async () => {
+    const { sqlite3, db } = await getClient();
 
-  await run(sqlite3, db, 'BEGIN');
-  try {
-    await run(sqlite3, db, `DELETE FROM extraction_cells`);
-    await run(sqlite3, db, `DELETE FROM extractions`);
-    await run(sqlite3, db, `DELETE FROM schema_columns`);
-    await run(sqlite3, db, `DELETE FROM schemas`);
-    await run(sqlite3, db, `DELETE FROM domains`);
-    await run(sqlite3, db, 'COMMIT');
-  } catch (e) {
-    await run(sqlite3, db, 'ROLLBACK');
-    throw e;
-  }
+    await run(sqlite3, db, 'BEGIN');
+    try {
+      await run(sqlite3, db, `DELETE FROM extraction_cells`);
+      await run(sqlite3, db, `DELETE FROM extractions`);
+      await run(sqlite3, db, `DELETE FROM schema_columns`);
+      await run(sqlite3, db, `DELETE FROM schemas`);
+      await run(sqlite3, db, `DELETE FROM domains`);
+      await run(sqlite3, db, 'COMMIT');
+    } catch (e) {
+      await run(sqlite3, db, 'ROLLBACK');
+      throw e;
+    }
+  });
 }
 
 export async function applyRetentionKeepLastPerDomain(keepLastPerDomain: number): Promise<{ deletedExtractions: number }> {
-  const keepN = Math.max(0, Math.floor(keepLastPerDomain));
-  const { sqlite3, db } = await getClient();
+  return await withDbLock(async () => {
+    const keepN = Math.max(0, Math.floor(keepLastPerDomain));
+    const { sqlite3, db } = await getClient();
 
-  const res = await execWithParams(
-    sqlite3,
-    db,
-    `
+    const res = await execWithParams(
+      sqlite3,
+      db,
+      `
       SELECT e.id, d.domain, e.extracted_at
       FROM extractions e
       JOIN schemas s ON s.id = e.schema_id
       JOIN domains d ON d.id = s.domain_id
     `,
-    [],
-  );
-  const items = (res.rows ?? []).map((r: any[]) => ({
-    id: Number(r[0]),
-    domain: String(r[1] ?? ''),
-    extractedAt: Number(r[2] ?? 0),
-  }));
+      [],
+    );
+    const items = (res.rows ?? []).map((r: any[]) => ({
+      id: Number(r[0]),
+      domain: String(r[1] ?? ''),
+      extractedAt: Number(r[2] ?? 0),
+    }));
 
-  const idsToDelete = computeExtractionIdsToDeleteKeepLastPerDomain(items, keepN);
-  if (idsToDelete.length === 0) return { deletedExtractions: 0 };
+    const idsToDelete = computeExtractionIdsToDeleteKeepLastPerDomain(items, keepN);
+    if (idsToDelete.length === 0) return { deletedExtractions: 0 };
 
-  await run(sqlite3, db, 'BEGIN');
-  try {
-    for (const id of idsToDelete) {
-      await run(sqlite3, db, `DELETE FROM extraction_cells WHERE extraction_id = ?`, [id]);
-      await run(sqlite3, db, `DELETE FROM extractions WHERE id = ?`, [id]);
+    await run(sqlite3, db, 'BEGIN');
+    try {
+      for (const id of idsToDelete) {
+        await run(sqlite3, db, `DELETE FROM extraction_cells WHERE extraction_id = ?`, [id]);
+        await run(sqlite3, db, `DELETE FROM extractions WHERE id = ?`, [id]);
+      }
+      await run(sqlite3, db, 'COMMIT');
+      return { deletedExtractions: idsToDelete.length };
+    } catch (e) {
+      await run(sqlite3, db, 'ROLLBACK');
+      throw e;
     }
-    await run(sqlite3, db, 'COMMIT');
-    return { deletedExtractions: idsToDelete.length };
-  } catch (e) {
-    await run(sqlite3, db, 'ROLLBACK');
-    throw e;
-  }
+  });
 }
 

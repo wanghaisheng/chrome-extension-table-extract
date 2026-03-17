@@ -1,7 +1,8 @@
 const DB_STORAGE_KEY = 'table_extract_sqlite_db_v1';
 const ENABLED_DOMAINS_KEY = 'table_extract_sqlite_enabled_domains_v1';
 const RETENTION_POLICY_KEY = 'table_extract_sqlite_retention_policy_v1';
-const PINNED_SCHEMA_KEY = 'table_extract_sqlite_pinned_schema_per_domain_v1';
+const PINNED_SCHEMA_KEY = 'table_extract_sqlite_pinned_schema_per_domain_and_pattern_v1';
+const PINNED_SCHEMA_KEY_LEGACY = 'table_extract_sqlite_pinned_schema_per_domain_v1';
 
 export type RetentionPolicy = {
   enabled: boolean;
@@ -48,26 +49,53 @@ export async function setRetentionPolicy(policy: RetentionPolicy): Promise<void>
 }
 
 export async function clearSqliteLocalSettings(): Promise<void> {
-  await chrome.storage.local.remove([ENABLED_DOMAINS_KEY, RETENTION_POLICY_KEY, PINNED_SCHEMA_KEY, DB_STORAGE_KEY]);
+  await chrome.storage.local.remove([
+    ENABLED_DOMAINS_KEY,
+    RETENTION_POLICY_KEY,
+    PINNED_SCHEMA_KEY,
+    PINNED_SCHEMA_KEY_LEGACY,
+    DB_STORAGE_KEY,
+  ]);
 }
 
 export async function getPinnedSchemaVersions(): Promise<Record<string, number>> {
-  const res = await chrome.storage.local.get(PINNED_SCHEMA_KEY);
-  return (res?.[PINNED_SCHEMA_KEY] as Record<string, number> | undefined) ?? {};
+  const res = await chrome.storage.local.get([PINNED_SCHEMA_KEY, PINNED_SCHEMA_KEY_LEGACY]);
+  const current = (res?.[PINNED_SCHEMA_KEY] as Record<string, number> | undefined) ?? {};
+  const legacy = (res?.[PINNED_SCHEMA_KEY_LEGACY] as Record<string, number> | undefined) ?? {};
+
+  // One-way migration: map legacy "domain -> version" to "domain::/ -> version".
+  const migrated: Record<string, number> = { ...current };
+  let didMigrate = false;
+  for (const d of Object.keys(legacy)) {
+    const v = legacy[d];
+    if (typeof v !== 'number' || !Number.isFinite(v)) continue;
+    const key = `${d}::/`;
+    if (migrated[key] == null) {
+      migrated[key] = v;
+      didMigrate = true;
+    }
+  }
+  if (didMigrate) {
+    await chrome.storage.local.set({ [PINNED_SCHEMA_KEY]: migrated });
+    await chrome.storage.local.remove([PINNED_SCHEMA_KEY_LEGACY]);
+  }
+
+  return migrated;
 }
 
-export async function getPinnedSchemaVersion(domain: string): Promise<number | null> {
+export async function getPinnedSchemaVersion(domain: string, urlPattern = '/'): Promise<number | null> {
   const all = await getPinnedSchemaVersions();
-  const v = all[domain];
+  const v = all[`${domain}::${urlPattern || '/'}`];
   return typeof v === 'number' && Number.isFinite(v) ? v : null;
 }
 
-export async function setPinnedSchemaVersion(domain: string, version: number | null): Promise<void> {
+export async function setPinnedSchemaVersion(domain: string, urlPattern: string, version: number | null): Promise<void> {
   const all = await getPinnedSchemaVersions();
+  const key = `${domain}::${urlPattern || '/'}`;
   if (version == null) {
-    delete all[domain];
+    delete all[key];
   } else {
-    all[domain] = Math.max(1, Math.floor(version));
+    all[key] = Math.max(1, Math.floor(version));
   }
   await chrome.storage.local.set({ [PINNED_SCHEMA_KEY]: all });
 }

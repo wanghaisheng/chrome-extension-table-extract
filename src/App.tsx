@@ -9,7 +9,15 @@ import LoadingSkeleton from './components/loading-skeleton';
 import { ExceptionMessage } from "./types";
 import History from './components/history';
 import { getRetentionPolicy, isDomainEnabled } from './utils/sqlite/storage';
-import { applyRetentionKeepLastPerDomain, clearAllData, storeExtraction, listExtractionUrls, listRecentExtractions, getExtractionTable } from './utils/sqlite/wa';
+import {
+  applyRetentionKeepLastPerDomain,
+  clearAllData,
+  getExtractionTable,
+  listDomainUrlPatterns,
+  listExtractionUrls,
+  listRecentExtractions,
+  storeExtraction,
+} from './utils/sqlite/wa';
 
 function isResponseIsAnException(response: ExceptionMessage) {
   return response.code >= 0 && typeof response.message === 'string';
@@ -32,6 +40,7 @@ const App: FunctionalComponent = () => {
     (window as any).__tableExtractDebug = {
       listExtractionUrls,
       listRecentExtractions,
+      listDomainUrlPatterns,
       getExtractionTable,
       applyRetentionKeepLastPerDomain,
       clearAllData,
