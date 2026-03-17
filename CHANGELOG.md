@@ -19,6 +19,7 @@
 ### Docs
 
 * rebrand docs to "Table Extract" and update repository URLs / attribution
+* add and maintain local-first roadmap (`roadmap.md`)
 
 ### Security
 

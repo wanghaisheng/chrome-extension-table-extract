@@ -14,26 +14,12 @@ This roadmap focuses on a **local-first** workflow: extracted data is persisted 
 - Local persistence using SQLite (WASM) with IndexedDB VFS.
 - "Add to SQLite" action in the popup UI.
 - Domain opt-in + same-domain auto-capture on subsequent pages when extraction succeeds.
-- Playwright E2E coverage for opt-in + auto-capture.
+- History UI: list recent extractions + open detail preview.
+- Domain controls: enable/disable auto-capture; delete all data for a domain.
+- Data lifecycle: optional retention policy (keep last N per domain); clear all local data.
+- Automated tests: Playwright E2E (opt-in/auto-capture + controls + clear-all) + unit tests (SQLite core + retention).
 
-## Next (0.1) – Make storage visible and manageable
-
-**Goal**: users can understand what is being stored, and control it.
-
-- **History UI**
-  - list recent extractions (domain, URL, timestamp, row count)
-  - open an extraction detail view (preview first N rows)
-- **Domain controls**
-  - show per-domain auto-capture status (enabled/disabled)
-  - disable auto-capture for a domain
-  - delete all data for a domain
-- **Data lifecycle**
-  - optional retention policy (e.g., keep last N extractions per domain)
-  - "Clear all local data" action
-- **Validation**
-  - Playwright: manage UI toggles + verify DB reflects changes
-
-## Near-term (0.2) – Retrieval & export without leaving the extension
+## Next (0.2) – Retrieval & export without leaving the extension
 
 **Goal**: local storage becomes useful for reuse, not just archiving.
 
