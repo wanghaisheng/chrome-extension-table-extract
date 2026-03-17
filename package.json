@@ -1,12 +1,22 @@
 {
-  "name": "rows-x",
+  "name": "chrome-extension-table-extract",
   "private": true,
   "version": "1.30.6",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/wanghaisheng/chrome-extension-table-extract.git"
+  },
+  "homepage": "https://github.com/wanghaisheng/chrome-extension-table-extract",
+  "bugs": {
+    "url": "https://github.com/wanghaisheng/chrome-extension-table-extract/issues"
+  },
   "type": "module",
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
     "test:e2e": "tsc && vite build --mode=e2e && jest --maxWorkers=1",
+    "test:unit": "jest -c ./jest.unit.config.cjs",
+    "test:pw": "tsc && vite build --mode=e2e && playwright test",
     "preview": "vite preview",
     "lint": "eslint src -c ./.eslintrc.cjs --ext .jsx,.js,.ts,.tsx",
     "check-types": "tsc --noEmit",
@@ -20,15 +30,19 @@
     "@types/puppeteer": "^7.0.4",
     "eslint-plugin-import": "^2.29.1",
     "preact": "^10.19.3",
-    "ua-parser-js": "^1.0.37"
+    "sql.js": "^1.14.1",
+    "ua-parser-js": "^1.0.37",
+    "wa-sqlite": "^1.0.0"
   },
   "devDependencies": {
     "@crxjs/vite-plugin": "^2.0.0-beta.23",
     "@modyfi/vite-plugin-yaml": "^1.1.0",
+    "@playwright/test": "^1.58.2",
     "@preact/preset-vite": "^2.8.1",
     "@types/chrome": "^0.0.293",
     "@types/jest": "^29.5.11",
     "@types/js-yaml": "^4.0.9",
+    "@types/sql.js": "^1.4.9",
     "@types/ua-parser-js": "^0.7.39",
     "@typescript-eslint/eslint-plugin": "^4.28.3",
     "@typescript-eslint/parser": "^4.0.0",

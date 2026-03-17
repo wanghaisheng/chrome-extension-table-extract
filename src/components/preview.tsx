@@ -2,22 +2,44 @@ import Button from './button';
 import './preview.css';
 import { array2tsv, hasImage } from '../utils/copy';
 import { FunctionComponent } from 'preact';
+import { useMemo, useState } from 'preact/hooks';
 import { ScrapperResults } from '../utils/chrome';
 import { reportUsage } from '../utils/rows-api/report';
+import { storeExtraction } from '../utils/sqlite/wa';
+import { setDomainEnabled } from '../utils/sqlite/storage';
 
 interface Props {
   results: ScrapperResults;
 }
 
 const Preview: FunctionComponent<Props> = ({ results = [] }) => {
-  const openInRows = async (table: string[][]) => {
+  const [sqliteStatusByKey, setSqliteStatusByKey] = useState<Record<string, 'idle' | 'saving' | 'saved' | 'error'>>({});
+
+  const keyForResult = useMemo(() => {
+    return (result: { title?: string; table: string[][] }) =>
+      `${result.title ?? ''}::${result.table.length}x${(result.table[0] ?? []).length}`;
+  }, []);
+
+  const addToSQLite = async (result: { title?: string; table: string[][] }) => {
+    const key = keyForResult(result);
+    if (sqliteStatusByKey[key] === 'saving') return;
+
     try {
-      await chrome.runtime.sendMessage({
-        action: 'rows-x:store',
-        data: array2tsv(table),
-      });
+      setSqliteStatusByKey((prev) => ({ ...prev, [key]: 'saving' }));
+      const tabResp = await chrome.runtime.sendMessage({ action: 'table-extract:get-current-web-tab' });
+      if (!tabResp?.ok) {
+        throw new Error(tabResp?.error ?? 'Failed to get current tab');
+      }
+
+      const url = tabResp.url as string;
+      const pageTitle = tabResp.title as string;
+      const { extractionId, domain } = await storeExtraction({ url, pageTitle, table: result.table });
+      await setDomainEnabled(domain, true);
+      console.log('Stored extraction in SQLite:', { extractionId, domain });
+      setSqliteStatusByKey((prev) => ({ ...prev, [key]: 'saved' }));
     } catch (error) {
-      console.error("Failed to open data in Rows:", error);
+      console.error('Failed to store data in SQLite:', error);
+      setSqliteStatusByKey((prev) => ({ ...prev, [key]: 'error' }));
     }
   };
   
@@ -54,6 +76,14 @@ const Preview: FunctionComponent<Props> = ({ results = [] }) => {
   return (
     <div className="results">
       {results.map((result) => {
+        const key = keyForResult(result);
+        const status = sqliteStatusByKey[key] ?? 'idle';
+        const sqliteLabel =
+          status === 'saving' ? 'Saving…' :
+          status === 'saved' ? 'Saved' :
+          status === 'error' ? 'Retry SQLite' :
+          'Add to SQLite';
+
         return (
           <div className="table-preview">
             <div className="table-header">
@@ -82,11 +112,12 @@ const Preview: FunctionComponent<Props> = ({ results = [] }) => {
                   <img alt="copy" src="/icons/copy.svg" />
                 </Button>
                 <Button
-                  className="open-rows-btn"
+                  className="sqlite-btn"
                   variant="primary"
-                  onClick={() => openInRows(result.table)}
+                  disabled={status === 'saving' || status === 'saved'}
+                  onClick={() => addToSQLite(result)}
                 >
-                  Open in Rows
+                  {sqliteLabel}
                 </Button>
               </div>
             </div>

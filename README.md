@@ -1,36 +1,31 @@
-# RowsX
+# Table Extract (fork)
 
-RowsX is a Chrome extension that performs simple web scraping tasks for business users. It was built to help users load data from websites with HTML tables into spreadsheets, and is developed by [Rows.com](https://rows.com).
+Table Extract is a Chrome extension that extracts tables and lists from web pages and lets you use the data in different destinations.
 
-[Demo video](https://www.youtube.com/watch?v=RjOLjgCvayM) · [Install extension from the Chrome Web Store](https://chromewebstore.google.com/detail/rowsx/abkccndhocmfdombbpmnhfjidcdcjjeo) · [X](https://twitter.com/RowsHQ) · [LinkedIn](https://www.linkedin.com/company/rowshq) · [Discord](https://discord.gg/MqnBDJdf)
+This repository is a derivative work based on the original open-source RowsX project by [Rows.com](https://rows.com) and is distributed under the same MIT license. See `LICENSE`.
+
+Key additions in this fork:
+
+- **Local persistence**: store extracted data into a wasm-backed SQLite database for later querying and reuse (in progress).
+- **Domain opt-in + auto capture**: once enabled for a domain, subsequent pages on the same domain can auto-save extractions without repeated clicks (in progress).
+
+[Repo](https://github.com/wanghaisheng/chrome-extension-table-extract) · [Issues](https://github.com/wanghaisheng/chrome-extension-table-extract/issues) · [Demo video](https://www.youtube.com/watch?v=RjOLjgCvayM) · [Install original extension from the Chrome Web Store](https://chromewebstore.google.com/detail/rowsx/abkccndhocmfdombbpmnhfjidcdcjjeo)
 
 
 ![RowsX](https://github.com/rows/X/assets/31993620/c80634eb-27d5-443f-b5de-bb8c2c21e1b3)
 
 
-## About Rows
+## About Table Extract
 
-[Rows](https://rows.com) is a modern spreadsheet. It is the easiest way to import, transform and share data in a spreadsheet.
+Table Extract is a fork of the open-source RowsX extension. It keeps the original goal of helping people move tabular data from the browser into tools they control, and adds new destinations such as local SQLite storage.
 
-## Why Open-source RowsX?
+The original RowsX was built by the Rows team during a hackathon in January 2024 to help users get data from the web into spreadsheets. This fork keeps the same spirit, but focuses on:
 
-We're opening RowsX to the community and invite everyone to contribute with new features, support to new websites or new ideas to improve it. 
+- using the extension as a general-purpose **table extractor** (not only for Rows);
+- experimenting with **local-first storage** and domain-level auto capture;
+- keeping the user in control of what is extracted and where it goes.
 
-RowsX was born during a team hackathon in January of 2024. We built it to solve a problem we see our customers struggle with everyday: getting data from the web to a spreadsheet. The Rows platform lets you import data from files, via Integrations with APIs and SaaS services, and connectors on 3rd party platforms that call our Rows API. RowsX extends the importing options to the Browser! Since launching it, more than two thousand people have used it to import lists of data from countless sites, internal tools and back office systems.
-
-
-## Open Bounties Program
-
-Join our Open Bounties Program and get rewarded for enhancing the extension! 
-
-Current Open Bounties:
-
-- [ ] Port extension to Safari: $250
-- [ ] Support parsing tables in PDFs: $150. [Example](https://www.oecd.org/pisa/OECD_2022_PISA_Results_Comparing%20countries%E2%80%99%20and%20economies%E2%80%99%20performance%20in%20mathematics.pdf).
-
-To ensure quality and alignment with our goals, features are only eligible for a bounty once they are approved by our team and made publicly available. If you have submitted code to solve one of the bounties, let us know at security@rows.com.
-
-Note: RowsX is a tool for business people to use that translates what they see into a spreadsheet. Atm we don't aim to build a fully automated scraper platform that operates beyond the actions of the user and what the user can see.
+> Upstream credit: RowsX and the Rows spreadsheet platform remain great options if you want a modern, collaborative spreadsheet with native integrations. See [Rows](https://rows.com) for more.
 
 ## Get Started
 
@@ -57,10 +52,22 @@ Once your development environment is set up, follow these steps to start using o
 > 1. Open the Chrome extensions page at [chrome://extensions](chrome://extensions/).
 > 2. In the top right corner, you have a switch called "Developer Mode". Just activate it.
 > 3. Click the "Load unpacked" button.
-> 4. Select the directory containing your extension project. For example `~/repos/rows/x/dist`.
+> 4. Select the directory containing your extension project. For example `./dist`.
 > 5. Your extension should now be loaded and running in development mode.
 > 6. Pin the extension to reach it easily :smiley:
 > 7. You can make changes to your extension files, and they will automatically be reflected in the browser.
+
+## Destinations
+
+Table Extract supports multiple post-extraction destinations.
+
+- **Open in Rows** (existing): export the extracted table to Rows by opening `https://rows.com/new` and injecting a TSV payload into `localStorage` under the `rows_x` key.
+- **Add extracted data to SQLite** (this fork, in progress): save extracted tables into a wasm SQLite database managed by the extension.
+
+### SQLite auto-capture behavior (this fork, in progress)
+
+- **First time per domain**: user clicks "Add extracted data to SQLite" to opt in that domain.
+- **After opt-in**: for subsequent URLs under the same domain, once extraction succeeds, the extension automatically writes the extracted data to SQLite without requiring another click.
 
 ### .env File
 
@@ -185,6 +192,13 @@ In the following image, you can see how it works and each step will have a bette
 8. The app renders and will look for the value of `rows_x` at `LocalStorage`, if there is any data it will load the info to the clipboard
 9. After that the app will trigger a paste event that will load the TSV into a new Table.
 10. The user sees the scraped information in Table 1 of a new Page.
+
+## License and Attribution
+
+This project is licensed under the **MIT License**. Per the MIT terms, the copyright notice and license text must be included with copies or substantial portions of the Software.
+
+- **Upstream**: RowsX by Rows (see `LICENSE`).
+- **This fork**: adds local SQLite persistence and domain-level auto-capture on top of the upstream behavior.
 
 
 ## Contributions

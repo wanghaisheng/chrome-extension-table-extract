@@ -18,7 +18,7 @@ const NoResults = ({ message }: Props): JSX.Element => {
       <div className="no-results">
         <img src="/empty.svg" />
         <strong>No results</strong>
-        <span>{message ?? 'Would you like RowsX to support this website?'}</span>
+        <span>{message ?? 'Would you like Table Extract to support this website?'}</span>
         <div className="btn-container">
           <Button variant="primary" onClick={redirectToFeedback}>
             Report

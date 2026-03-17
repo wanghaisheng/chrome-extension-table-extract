@@ -4,8 +4,17 @@ import { getCurrentTab, runScrapper } from './utils/chrome';
 import { reportUsage } from './utils/rows-api/report';
 import { getScrapperOptionsByUrl } from './utils/scrapperUtils';
 
+async function getCurrentWebTab(): Promise<chrome.tabs.Tab | undefined> {
+  // In real usage the UI is a popup, but in automated tests it may be opened as a tab.
+  // Prefer a normal http(s) page tab from the last focused window.
+  const tabs = await chrome.tabs.query({ lastFocusedWindow: true });
+  const webTab = tabs.find((t) => t.url?.startsWith('http://') || t.url?.startsWith('https://'));
+  if (webTab) return webTab;
+  return await getCurrentTab();
+}
+
 async function scrap() {
-  const tab = await getCurrentTab();
+  const tab = await getCurrentWebTab();
 
   if (!tab || !tab.url || !tab.title) {
     return;
@@ -24,7 +33,7 @@ async function scrap() {
 }
 
 async function openInRows(message: { data: string; }) {
-  const tab = await getCurrentTab();
+  const tab = await getCurrentWebTab();
 
   if (!tab || !tab.url || !tab.title) {
     return;
@@ -54,6 +63,17 @@ chrome.runtime.onMessage.addListener((message, _, sendResponse) => {
       break;
     case 'rows-x:store':
       openInRows(message);
+      break;
+    case 'table-extract:get-current-web-tab':
+      getCurrentWebTab()
+        .then((tab) => {
+          if (!tab?.url) {
+            sendResponse({ ok: false, error: 'No active web tab' });
+            return;
+          }
+          sendResponse({ ok: true, url: tab.url, title: tab.title ?? '' });
+        })
+        .catch((error) => sendResponse({ ok: false, error: String(error?.stack ?? error?.message ?? error) }));
       break;
     default:
       break;

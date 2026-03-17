@@ -7,6 +7,8 @@ import Header from './components/header';
 import Preview from './components/preview';
 import LoadingSkeleton from './components/loading-skeleton';
 import { ExceptionMessage } from "./types";
+import { isDomainEnabled } from './utils/sqlite/storage';
+import { storeExtraction, listExtractionUrls } from './utils/sqlite/wa';
 
 function isResponseIsAnException(response: ExceptionMessage) {
   return response.code >= 0 && typeof response.message === 'string';
@@ -36,6 +38,38 @@ const App: FunctionalComponent = () => {
       setLoading(false);
     });
   }, []);
+
+  useEffect(() => {
+    (async () => {
+      if (!Array.isArray(results) || results.length === 0) return;
+
+      // Debug surface for E2E tests and local diagnostics.
+      (window as any).__tableExtractDebug = {
+        listExtractionUrls,
+      };
+
+      const tabResp = await chrome.runtime.sendMessage({ action: 'table-extract:get-current-web-tab' });
+      if (!tabResp?.ok) return;
+
+      const url = tabResp.url as string;
+      const pageTitle = tabResp.title as string;
+      const domain = new URL(url).hostname;
+      const enabled = await isDomainEnabled(domain);
+      if (!enabled) return;
+
+      await Promise.all(
+        results.map((r: any) =>
+          storeExtraction({
+            url,
+            pageTitle,
+            table: r.table,
+          }),
+        ),
+      );
+
+      console.log('Auto-captured extractions for domain:', domain);
+    })().catch((e) => console.warn('Auto-capture to SQLite failed:', e));
+  }, [results]);
 
   return (
     <>

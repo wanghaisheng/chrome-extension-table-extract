@@ -1,3 +1,24 @@
+## [Unreleased](https://github.com/wanghaisheng/chrome-extension-table-extract/compare/v1.30.6...HEAD)
+
+### Features
+
+* add local SQLite persistence for extracted tables (wa-sqlite + IndexedDB VFS)
+* add domain opt-in and same-domain auto-capture after first manual save
+* add "Add to SQLite" action in the preview UI
+
+### Testing
+
+* add Playwright extension E2E test for SQLite opt-in + auto-capture (`npm run test:pw`)
+* add SQLite core unit tests (`npm run test:unit`)
+
+### Docs
+
+* rebrand docs to "Table Extract" and update repository URLs / attribution
+
+### Security
+
+* allow WebAssembly in extension pages via MV3 CSP (`wasm-unsafe-eval`) for SQLite runtime
+
 ## [1.30.6](https://github.com/rows/X/compare/v1.30.5...v1.30.6) (2025-12-04)
 
 ## [1.30.5](https://github.com/rows/X/compare/v1.30.4...v1.30.5) (2025-12-03)

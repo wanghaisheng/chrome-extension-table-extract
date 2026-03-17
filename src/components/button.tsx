@@ -8,6 +8,7 @@ interface Props {
   type?: string;
   className?: string;
   size?: 'small';
+  disabled?: boolean;
 }
 
 const Button: FunctionComponent<Props> = ({
@@ -17,9 +18,16 @@ const Button: FunctionComponent<Props> = ({
   type,
   size = '',
   children,
+  disabled = false,
 }) => {
   return (
-    <button type={type} className={`btn ${className} ${variant} ${size}`} onClick={onClick}>
+    <button
+      type={type}
+      className={`btn ${className} ${variant} ${size}`}
+      onClick={disabled ? undefined : onClick}
+      disabled={disabled}
+      aria-disabled={disabled}
+    >
       {children}
     </button>
   );

@@ -1,12 +1,15 @@
 {
-  "name": "RowsX",
-  "description": "RowsX is your go-to tool for efficiently extracting tables and lists from web pages and move that data to Rows.",
+  "name": "Table Extract",
+  "description": "Extract tables and lists from web pages and export or save them locally.",
   "manifest_version": 3,
   "background": {
     "service_worker": "src/background.ts",
     "type": "module"
   },
-  "permissions": ["tabs", "activeTab", "scripting"],
+  "content_security_policy": {
+    "extension_pages": "script-src 'self' 'wasm-unsafe-eval'; object-src 'self'"
+  },
+  "permissions": ["tabs", "activeTab", "scripting", "storage"],
   "host_permissions": [
     "https://rows.com/*",
     "https://rows.new/*",
