@@ -205,3 +205,95 @@ export async function listExtractionUrls(): Promise<string[]> {
   return (res.rows ?? []).map((r: any[]) => String(r[0] ?? ''));
 }
 
+export type ExtractionSummary = {
+  id: number;
+  domain: string;
+  url: string;
+  pageTitle?: string;
+  extractedAt: number;
+  rowCount: number;
+  schemaVersion: number;
+};
+
+export async function listRecentExtractions(limit = 25): Promise<ExtractionSummary[]> {
+  const { sqlite3, db } = await getClient();
+  const res = await sqlite3.execWithParams(
+    db,
+    `
+      SELECT
+        e.id,
+        d.domain,
+        e.url,
+        e.page_title,
+        e.extracted_at,
+        e.row_count,
+        s.version
+      FROM extractions e
+      JOIN schemas s ON s.id = e.schema_id
+      JOIN domains d ON d.id = s.domain_id
+      ORDER BY e.extracted_at DESC, e.id DESC
+      LIMIT ?
+    `,
+    [limit],
+  );
+
+  return (res.rows ?? []).map((r: any[]) => ({
+    id: Number(r[0]),
+    domain: String(r[1] ?? ''),
+    url: String(r[2] ?? ''),
+    pageTitle: r[3] == null ? undefined : String(r[3]),
+    extractedAt: Number(r[4]),
+    rowCount: Number(r[5]),
+    schemaVersion: Number(r[6]),
+  }));
+}
+
+export async function getExtractionTable(extractionId: number, maxRows = 20): Promise<string[][]> {
+  const { sqlite3, db } = await getClient();
+
+  const schemaRes = await sqlite3.execWithParams(db, `SELECT schema_id FROM extractions WHERE id = ?`, [extractionId]);
+  const schemaId = schemaRes.rows?.[0]?.[0];
+  if (!schemaId) throw new Error(`Extraction not found: ${extractionId}`);
+
+  const headersRes = await sqlite3.execWithParams(
+    db,
+    `SELECT name FROM schema_columns WHERE schema_id = ? ORDER BY col_index ASC`,
+    [schemaId],
+  );
+  const headers = (headersRes.rows ?? []).map((r: any[]) => String(r[0] ?? ''));
+
+  const cellsRes = await sqlite3.execWithParams(
+    db,
+    `
+      SELECT row_index, col_index, value
+      FROM extraction_cells
+      WHERE extraction_id = ? AND row_index < ?
+      ORDER BY row_index ASC, col_index ASC
+    `,
+    [extractionId, maxRows],
+  );
+
+  const byRow: Record<number, Record<number, string>> = {};
+  for (const row of cellsRes.rows ?? []) {
+    const rIdx = Number(row[0]);
+    const cIdx = Number(row[1]);
+    const value = row[2] == null ? '' : String(row[2]);
+    byRow[rIdx] = byRow[rIdx] ?? {};
+    byRow[rIdx][cIdx] = value;
+  }
+
+  const dataRows: string[][] = [];
+  const rowIndexes = Object.keys(byRow).map(Number).sort((a, b) => a - b);
+  for (const rIdx of rowIndexes) {
+    const cols = byRow[rIdx] ?? {};
+    const row: string[] = [];
+    const width = Math.max(headers.length, ...Object.keys(cols).map((n) => Number(n) + 1), 0);
+    for (let c = 0; c < width; c++) {
+      row.push(cols[c] ?? '');
+    }
+    dataRows.push(row);
+  }
+
+  return [headers, ...dataRows];
+}
+

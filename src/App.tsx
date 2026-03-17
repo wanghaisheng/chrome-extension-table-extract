@@ -7,8 +7,9 @@ import Header from './components/header';
 import Preview from './components/preview';
 import LoadingSkeleton from './components/loading-skeleton';
 import { ExceptionMessage } from "./types";
+import History from './components/history';
 import { isDomainEnabled } from './utils/sqlite/storage';
-import { storeExtraction, listExtractionUrls } from './utils/sqlite/wa';
+import { storeExtraction, listExtractionUrls, listRecentExtractions, getExtractionTable } from './utils/sqlite/wa';
 
 function isResponseIsAnException(response: ExceptionMessage) {
   return response.code >= 0 && typeof response.message === 'string';
@@ -19,6 +20,7 @@ const App: FunctionalComponent = () => {
   const [exceptionOnScrapperResult, setException] = useState("");
   const [results, setResults] = useState([]);
   const [isReportFormOpen, toggleReportTab] = useReducer((isOpen) => !isOpen, false);
+  const [activePanel, setActivePanel] = useState<'extract' | 'history'>('extract');
 
   const hasExceptions = Boolean(exceptionOnScrapperResult);
   const showLoading = !hasExceptions && isLoading;
@@ -26,6 +28,13 @@ const App: FunctionalComponent = () => {
   const noResults = !showLoading && (!hasExceptions && results.length === 0);
 
   useEffect(() => {
+    // Debug surface for E2E tests and local diagnostics.
+    (window as any).__tableExtractDebug = {
+      listExtractionUrls,
+      listRecentExtractions,
+      getExtractionTable,
+    };
+
     chrome.runtime.sendMessage({ action: 'rows-x:scrap' }, (response) => {
       if (isResponseIsAnException(response)) {
         setResults([]);
@@ -42,11 +51,6 @@ const App: FunctionalComponent = () => {
   useEffect(() => {
     (async () => {
       if (!Array.isArray(results) || results.length === 0) return;
-
-      // Debug surface for E2E tests and local diagnostics.
-      (window as any).__tableExtractDebug = {
-        listExtractionUrls,
-      };
 
       const tabResp = await chrome.runtime.sendMessage({ action: 'table-extract:get-current-web-tab' });
       if (!tabResp?.ok) return;
@@ -73,16 +77,25 @@ const App: FunctionalComponent = () => {
 
   return (
     <>
-      <Header onReportClick={toggleReportTab} />
+      <Header
+        onReportClick={toggleReportTab}
+        onHistoryClick={() => setActivePanel((p) => (p === 'history' ? 'extract' : 'history'))}
+      />
       <div className="container">
         {isReportFormOpen ? (
           <FeedbackForm />
         ) : (
           <>
             {showLoading && (<LoadingSkeleton />)}
-            {showResults &&  <Preview results={results} />}
-            {noResults && <NoResults />}
-            {hasExceptions && <NoResults message={exceptionOnScrapperResult} />}
+            {!showLoading && activePanel === 'history' ? (
+              <History onBack={() => setActivePanel('extract')} />
+            ) : (
+              <>
+                {showResults && <Preview results={results} />}
+                {noResults && <NoResults />}
+                {hasExceptions && <NoResults message={exceptionOnScrapperResult} />}
+              </>
+            )}
           </>
         )}
       </div>

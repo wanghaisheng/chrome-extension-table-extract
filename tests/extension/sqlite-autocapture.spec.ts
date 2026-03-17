@@ -4,11 +4,6 @@ import { tmpdir } from 'os';
 import { join, resolve } from 'path';
 
 
-function base64ToUint8(base64: string): Uint8Array {
-  const buf = Buffer.from(base64, 'base64');
-  return new Uint8Array(buf.buffer, buf.byteOffset, buf.byteLength);
-}
-
 async function getExtensionIdFromContext(context: any): Promise<string> {
   // Preferred: MV3 background service worker exposes the extension id in its url.
   const deadline = Date.now() + 15_000;
@@ -65,12 +60,18 @@ async function getExtensionIdFromContext(context: any): Promise<string> {
 async function listExtractionUrlsFromDebug(extensionPage: any): Promise<string[]> {
   const deadline = Date.now() + 15_000;
   while (Date.now() < deadline) {
-    const urls = await extensionPage.evaluate(async () => {
+    const result = await extensionPage.evaluate(async () => {
       const dbg = (window as any).__tableExtractDebug;
-      if (!dbg?.listExtractionUrls) return null;
-      return await dbg.listExtractionUrls();
+      if (!dbg?.listExtractionUrls) return { ok: false, error: 'debug not ready' };
+      try {
+        const urls = await dbg.listExtractionUrls();
+        return { ok: true, urls };
+      } catch (e: any) {
+        return { ok: false, error: String(e?.message ?? e) };
+      }
     });
-    if (Array.isArray(urls)) return urls;
+
+    if (result?.ok && Array.isArray(result.urls)) return result.urls;
     await new Promise((r) => setTimeout(r, 250));
   }
   throw new Error('Debug API __tableExtractDebug.listExtractionUrls not available');
@@ -167,6 +168,20 @@ test('manual opt-in enables domain auto-capture on subsequent URLs', async () =>
 
   const urls = await listExtractionUrlsFromDebug(extPage);
   expect(urls).toEqual([url1, url2]);
+
+  // History UI: verify stored extractions are visible and preview can be opened.
+  await extPage.getByRole('button', { name: 'History' }).click();
+  await expect(extPage.getByText(url2)).toBeVisible();
+  await expect(extPage.getByText(url1)).toBeVisible();
+
+  // Open the newest entry (url2 should be the newest).
+  const openButtons = extPage.getByRole('button', { name: 'Open' });
+  await expect(openButtons.first()).toBeVisible();
+  await openButtons.first().click();
+
+  // Expect the preview table to include the header and at least one cell from page 2.
+  await expect(extPage.getByText('Name')).toBeVisible();
+  await expect(extPage.getByText('Charlie')).toBeVisible();
 
   await context.close();
 });
