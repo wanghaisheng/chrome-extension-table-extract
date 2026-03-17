@@ -43,6 +43,16 @@ Acceptance (optional / if implemented in this change):
 - user can pin an “active schema” per domain for display and filtering
 - pinning does not alter or delete existing stored data
 
+### R6. Optional Schema Scope by Page Type using `url_pattern` (Design Direction)
+
+Acceptance (optional / may be implemented in a follow-up change):
+
+- schemas can be scoped to **(domain + url_pattern)** rather than domain-only
+- example buckets:
+  - `/products/*` has its own schema/version stream
+  - `/users/*` has its own schema/version stream
+- a schema bump in one `url_pattern` bucket does not affect other buckets under the same domain
+
 ## Non-Requirements
 
 - no cloud sync
