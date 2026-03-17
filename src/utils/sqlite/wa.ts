@@ -221,6 +221,7 @@ export type ExtractionFilters = {
   urlSubstring?: string;
   extractedAfter?: number; // ms epoch inclusive
   extractedBefore?: number; // ms epoch inclusive
+  schemaVersion?: number;
 };
 
 export async function listExtractions(filters: ExtractionFilters = {}, limit = 50): Promise<ExtractionSummary[]> {
@@ -244,6 +245,10 @@ export async function listExtractions(filters: ExtractionFilters = {}, limit = 5
   if (typeof filters.extractedBefore === 'number') {
     where.push(`e.extracted_at <= ?`);
     params.push(filters.extractedBefore);
+  }
+  if (typeof filters.schemaVersion === 'number') {
+    where.push(`s.version = ?`);
+    params.push(filters.schemaVersion);
   }
 
   const whereSql = where.length ? `WHERE ${where.join(' AND ')}` : '';
@@ -278,6 +283,22 @@ export async function listExtractions(filters: ExtractionFilters = {}, limit = 5
     rowCount: Number(r[5]),
     schemaVersion: Number(r[6]),
   }));
+}
+
+export async function listDomainSchemaVersions(domain: string): Promise<number[]> {
+  const { sqlite3, db } = await getClient();
+  const res = await sqlite3.execWithParams(
+    db,
+    `
+      SELECT DISTINCT s.version
+      FROM schemas s
+      JOIN domains d ON d.id = s.domain_id
+      WHERE d.domain = ?
+      ORDER BY s.version DESC
+    `,
+    [domain],
+  );
+  return (res.rows ?? []).map((r: any[]) => Number(r[0])).filter((n: any) => Number.isFinite(n));
 }
 
 export async function listRecentExtractions(limit = 25): Promise<ExtractionSummary[]> {

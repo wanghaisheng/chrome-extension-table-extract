@@ -10,9 +10,19 @@ import {
   deleteDomainData,
   getExtractionTable,
   listExtractions,
+  listDomainSchemaVersions,
   listRecentExtractions,
 } from '../utils/sqlite/wa';
-import { clearSqliteLocalSettings, getRetentionPolicy, listEnabledDomains, RetentionPolicy, setDomainEnabled, setRetentionPolicy } from '../utils/sqlite/storage';
+import {
+  clearSqliteLocalSettings,
+  getPinnedSchemaVersion,
+  getRetentionPolicy,
+  listEnabledDomains,
+  RetentionPolicy,
+  setDomainEnabled,
+  setPinnedSchemaVersion,
+  setRetentionPolicy,
+} from '../utils/sqlite/storage';
 import { toCSV, toJSON, toTSV } from '../utils/export/serialize';
 
 type Props = {
@@ -40,6 +50,9 @@ const History: FunctionComponent<Props> = ({ onBack }) => {
   const [filterUrl, setFilterUrl] = useState<string>('');
   const [filterAfter, setFilterAfter] = useState<string>(''); // yyyy-mm-dd
   const [filterBefore, setFilterBefore] = useState<string>(''); // yyyy-mm-dd
+  const [filterSchemaVersion, setFilterSchemaVersion] = useState<string>(''); // number string
+  const [domainSchemaVersions, setDomainSchemaVersions] = useState<number[]>([]);
+  const [pinnedSchemaVersion, setPinnedSchema] = useState<number | null>(null);
 
   useEffect(() => {
     Promise.all([listRecentExtractions(25), listEnabledDomains(), getRetentionPolicy()])
@@ -50,6 +63,24 @@ const History: FunctionComponent<Props> = ({ onBack }) => {
       })
       .finally(() => setLoading(false));
   }, []);
+
+  useEffect(() => {
+    const d = filterDomain.trim();
+    if (!d) {
+      setDomainSchemaVersions([]);
+      setPinnedSchema(null);
+      return;
+    }
+    Promise.all([listDomainSchemaVersions(d), getPinnedSchemaVersion(d)])
+      .then(([versions, pinned]) => {
+        setDomainSchemaVersions(versions);
+        setPinnedSchema(pinned);
+      })
+      .catch(() => {
+        setDomainSchemaVersions([]);
+        setPinnedSchema(null);
+      });
+  }, [filterDomain]);
 
   useEffect(() => {
     if (!selectedId) {
@@ -75,12 +106,16 @@ const History: FunctionComponent<Props> = ({ onBack }) => {
       setStatusMsg('');
       const afterMs = filterAfter ? new Date(`${filterAfter}T00:00:00`).getTime() : undefined;
       const beforeMs = filterBefore ? new Date(`${filterBefore}T23:59:59`).getTime() : undefined;
+      const explicitSchema = filterSchemaVersion.trim() ? Number(filterSchemaVersion) : undefined;
+      const schemaVersion =
+        Number.isFinite(explicitSchema as any) ? explicitSchema : (pinnedSchemaVersion ?? undefined);
       const extractions = await listExtractions(
         {
           domain: filterDomain.trim() || undefined,
           urlSubstring: filterUrl.trim() || undefined,
           extractedAfter: afterMs,
           extractedBefore: beforeMs,
+          schemaVersion,
         },
         50,
       );
@@ -96,7 +131,23 @@ const History: FunctionComponent<Props> = ({ onBack }) => {
     setFilterUrl('');
     setFilterAfter('');
     setFilterBefore('');
+    setFilterSchemaVersion('');
     await refresh();
+  };
+
+  const pinSchema = async (version: number | null) => {
+    const d = filterDomain.trim();
+    if (!d) return;
+    setWorking(true);
+    try {
+      setStatusMsg('');
+      await setPinnedSchemaVersion(d, version);
+      const pinned = await getPinnedSchemaVersion(d);
+      setPinnedSchema(pinned);
+      setStatusMsg(version == null ? 'Cleared pinned schema.' : `Pinned schema v${version} for ${d}.`);
+    } finally {
+      setWorking(false);
+    }
   };
 
   const copySelected = async () => {
@@ -250,6 +301,35 @@ const History: FunctionComponent<Props> = ({ onBack }) => {
             <input type="date" value={filterAfter} disabled={isWorking} onInput={(e: any) => setFilterAfter(String(e.currentTarget?.value ?? ''))} />
             <div className="pill">Before</div>
             <input type="date" value={filterBefore} disabled={isWorking} onInput={(e: any) => setFilterBefore(String(e.currentTarget?.value ?? ''))} />
+          </div>
+          <div className="table-actions">
+            <div className="pill">Schema</div>
+            <select
+              style={{ width: '12rem' }}
+              value={filterSchemaVersion}
+              disabled={isWorking || !filterDomain.trim()}
+              onInput={(e: any) => setFilterSchemaVersion(String(e.currentTarget?.value ?? ''))}
+            >
+              <option value="">(any)</option>
+              {domainSchemaVersions.map((v) => (
+                <option value={String(v)} key={v}>
+                  {pinnedSchemaVersion === v ? `v${v} (pinned)` : `v${v}`}
+                </option>
+              ))}
+            </select>
+            <Button
+              variant="secondary"
+              disabled={isWorking || !filterDomain.trim() || domainSchemaVersions.length === 0}
+              onClick={() => {
+                const v = filterSchemaVersion.trim() ? Number(filterSchemaVersion) : (domainSchemaVersions[0] ?? null);
+                if (v && Number.isFinite(v)) pinSchema(v);
+              }}
+            >
+              Pin active schema
+            </Button>
+            <Button variant="secondary" disabled={isWorking || !filterDomain.trim()} onClick={() => pinSchema(null)}>
+              Clear pin
+            </Button>
           </div>
           <div className="table-actions">
             <Button variant="primary" disabled={isWorking} onClick={applyFilters}>Apply filters</Button>

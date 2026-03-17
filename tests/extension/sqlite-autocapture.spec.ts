@@ -77,6 +77,16 @@ async function listExtractionUrlsFromDebug(extensionPage: any): Promise<string[]
   throw new Error('Debug API __tableExtractDebug.listExtractionUrls not available');
 }
 
+async function waitForExtractionUrlsToContain(extensionPage: any, url: string): Promise<string[]> {
+  const deadline = Date.now() + 20_000;
+  while (Date.now() < deadline) {
+    const urls = await listExtractionUrlsFromDebug(extensionPage);
+    if (urls.includes(url)) return urls;
+    await new Promise((r) => setTimeout(r, 250));
+  }
+  throw new Error(`Timed out waiting for extraction urls to include ${url}`);
+}
+
 async function waitForRecentExtractionsToContain(extensionPage: any, url: string): Promise<void> {
   const deadline = Date.now() + 20_000;
   while (Date.now() < deadline) {
@@ -137,6 +147,7 @@ test('manual opt-in enables domain auto-capture on subsequent URLs', async () =>
 
   const url1 = 'https://example.test/page-1';
   const url2 = 'https://example.test/page-2';
+  const url3 = 'https://example.test/page-3';
 
   const html1 = `
     <html><head><title>Page 1</title></head>
@@ -159,6 +170,17 @@ test('manual opt-in enables domain auto-capture on subsequent URLs', async () =>
     </body></html>
   `;
 
+  // Header change -> should create schema v2 for the same domain.
+  const html3 = `
+    <html><head><title>Page 3</title></head>
+    <body>
+      <table>
+        <tr><th>Name</th><th>Age</th><th>City</th></tr>
+        <tr><td>Eva</td><td>60</td><td>Paris</td></tr>
+      </table>
+    </body></html>
+  `;
+
   await appPage.route('**/*', async (route) => {
     const reqUrl = route.request().url();
     if (reqUrl === url1) {
@@ -167,6 +189,10 @@ test('manual opt-in enables domain auto-capture on subsequent URLs', async () =>
     }
     if (reqUrl === url2) {
       await route.fulfill({ status: 200, contentType: 'text/html', body: html2 });
+      return;
+    }
+    if (reqUrl === url3) {
+      await route.fulfill({ status: 200, contentType: 'text/html', body: html3 });
       return;
     }
 
@@ -198,14 +224,22 @@ test('manual opt-in enables domain auto-capture on subsequent URLs', async () =>
   await appPage.bringToFront();
   await extPage.goto(extensionUrl, { waitUntil: 'domcontentloaded' });
 
-  const urls = await listExtractionUrlsFromDebug(extPage);
+  const urls = await waitForExtractionUrlsToContain(extPage, url2);
   expect(urls).toEqual([url1, url2]);
+
+  // Third URL: header change should create a new schema version via auto-capture.
+  await appPage.goto(url3, { waitUntil: 'domcontentloaded' });
+  await appPage.bringToFront();
+  await extPage.goto(extensionUrl, { waitUntil: 'domcontentloaded' });
+  const urls3 = await waitForExtractionUrlsToContain(extPage, url3);
+  expect(urls3).toEqual([url1, url2, url3]);
 
   // History UI: verify stored extractions are visible and preview can be opened.
   await extPage.getByRole('button', { name: 'History' }).click();
   await waitForRecentExtractionsToContain(extPage, url2);
   await expect(extPage.getByText(url2)).toBeVisible({ timeout: 20_000 });
   await expect(extPage.getByText(url1)).toBeVisible();
+  await expect(extPage.getByText(url3)).toBeVisible();
 
   // Filters: narrow to page-2 only.
   await extPage.getByPlaceholder('example.com').fill('example.test');
@@ -213,8 +247,9 @@ test('manual opt-in enables domain auto-capture on subsequent URLs', async () =>
   await extPage.getByRole('button', { name: 'Apply filters' }).click();
   await expect(extPage.getByText(url2)).toBeVisible();
   await expect(extPage.getByText(url1)).toHaveCount(0);
+  await expect(extPage.getByText(url3)).toHaveCount(0);
 
-  // Open the newest entry (url2 should be the newest).
+  // Open the filtered entry (url2) and validate export.
   const openButtons = extPage.getByRole('button', { name: 'Open' });
   await expect(openButtons.first()).toBeVisible();
   await openButtons.first().click();
@@ -233,6 +268,20 @@ test('manual opt-in enables domain auto-capture on subsequent URLs', async () =>
   // Expect the preview table to include the header and at least one cell from page 2.
   await expect(extPage.getByText('Name')).toBeVisible();
   await expect(extPage.getByText('Charlie')).toBeVisible();
+
+  // Re-open popup and History to reset selection state.
+  await extPage.goto(extensionUrl, { waitUntil: 'domcontentloaded' });
+  await extPage.getByRole('button', { name: 'History' }).click();
+  await waitForRecentExtractionsToContain(extPage, url3);
+
+  // Schema pinning: pin schema v2 then apply with (any URL) should keep only url3 visible.
+  await extPage.getByPlaceholder('example.com').fill('example.test');
+  await extPage.getByPlaceholder('/path').fill('');
+  await extPage.getByRole('button', { name: 'Pin active schema' }).click();
+  await extPage.getByRole('button', { name: 'Apply filters' }).click();
+  await expect(extPage.getByText(url3).first()).toBeVisible();
+  await expect(extPage.getByText(url2)).toHaveCount(0);
+  await expect(extPage.getByText(url1)).toHaveCount(0);
 
   await context.close();
 });

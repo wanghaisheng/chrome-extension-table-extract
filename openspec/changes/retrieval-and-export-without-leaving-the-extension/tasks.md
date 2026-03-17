@@ -58,14 +58,21 @@
 
 ## M3. Schema Evolution UX (Optional / Stretch)
 
-- [ ] M3.1 show schema version consistently in list + detail (if gaps exist)
-- [ ] M3.2 optional: pin an “active schema” per domain (defer by default)
+- [x] M3.1 show schema version consistently in list + detail (if gaps exist)
+- [x] M3.2 optional: pin an “active schema” per domain (defer by default)
 
 ## Closeout Rule
 
-- selected validation package
-- commands that ran
-- pass or fail status
-- residual risk
-- ADR or doc follow-up required
+- selected validation package:
+  - Playwright extension E2E
+  - Jest unit tests (serializers)
+- commands that ran:
+  - `npm run test:unit`
+  - `npm run test:pw`
+- pass or fail status:
+  - pass
+- residual risk:
+  - extension popup timing and download handling can be flaky in automation; tests use polling and download hooks
+- ADR or doc follow-up required:
+  - none
 
