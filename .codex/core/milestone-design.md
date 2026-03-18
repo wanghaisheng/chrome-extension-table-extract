@@ -52,6 +52,16 @@ Split the milestone again if:
 - it has no clear fallback or stopping point
 - it requires explaining multiple unrelated code paths to justify the same diff
 
+## Batch Or Promotion Milestones (pilot-first)
+
+If the work is a bulk rollout ("apply this change everywhere") or a promotion step:
+
+- the milestone must still be one coherent slice with one dominant validation story
+- define the pilot target set explicitly (3–8% or a small representative set)
+- define promotion batches explicitly (e.g. 2–5 targets, then 10–20, then full) and treat each as its own milestone
+- stop conditions must include "any batch regression" and name the rollback/safe fallback
+- follow `.codex/core/pilot-promotion.md` for the failure loop: stop expansion → debug → re-validate → continue
+
 ## Required Output Shape
 
 When you write a milestone into a change record or planning doc, prefer this order:

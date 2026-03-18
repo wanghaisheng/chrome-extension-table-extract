@@ -1,0 +1,690 @@
+{
+  "ok": true,
+  "checked_at": "2026-03-18T04:23:11.123Z",
+  "checks": [],
+  "warnings": [
+    {
+      "id": "docs.npm_scripts_exist",
+      "message": "found npm scripts referenced in .codex docs that are missing from package.json (169).",
+      "missing": [
+        {
+          "script": "test",
+          "file": ".codex/AGENTS.md"
+        },
+        {
+          "script": "type-check",
+          "file": ".codex/AGENTS.md"
+        },
+        {
+          "script": "test:performance",
+          "file": ".codex/AGENTS.md"
+        },
+        {
+          "script": "agent:scan",
+          "file": ".codex/AGENTS.md"
+        },
+        {
+          "script": "agent:search",
+          "file": ".codex/AGENTS.md"
+        },
+        {
+          "script": "agent:search",
+          "file": ".codex/AGENTS.md"
+        },
+        {
+          "script": "agent:search",
+          "file": ".codex/AGENTS.md"
+        },
+        {
+          "script": "agent:search",
+          "file": ".codex/AGENTS.md"
+        },
+        {
+          "script": "agent:search",
+          "file": ".codex/AGENTS.md"
+        },
+        {
+          "script": "agent:search",
+          "file": ".codex/AGENTS.md"
+        },
+        {
+          "script": "agent:match",
+          "file": ".codex/AGENTS.md"
+        },
+        {
+          "script": "agent:match",
+          "file": ".codex/AGENTS.md"
+        },
+        {
+          "script": "agent:match",
+          "file": ".codex/AGENTS.md"
+        },
+        {
+          "script": "agent:match",
+          "file": ".codex/AGENTS.md"
+        },
+        {
+          "script": "agent:stats",
+          "file": ".codex/AGENTS.md"
+        },
+        {
+          "script": "agent:stats",
+          "file": ".codex/AGENTS.md"
+        },
+        {
+          "script": "agent:stats",
+          "file": ".codex/AGENTS.md"
+        },
+        {
+          "script": "agent:stats",
+          "file": ".codex/AGENTS.md"
+        },
+        {
+          "script": "agent:validate",
+          "file": ".codex/AGENTS.md"
+        },
+        {
+          "script": "agent:validate",
+          "file": ".codex/AGENTS.md"
+        },
+        {
+          "script": "agent:validate",
+          "file": ".codex/AGENTS.md"
+        },
+        {
+          "script": "agent:scan",
+          "file": ".codex/core/agent-discovery-system.md"
+        },
+        {
+          "script": "agent:search",
+          "file": ".codex/core/agent-discovery-system.md"
+        },
+        {
+          "script": "agent:search",
+          "file": ".codex/core/agent-discovery-system.md"
+        },
+        {
+          "script": "agent:match",
+          "file": ".codex/core/agent-discovery-system.md"
+        },
+        {
+          "script": "agent:validate",
+          "file": ".codex/core/agent-discovery-system.md"
+        },
+        {
+          "script": "agent:stats",
+          "file": ".codex/core/agent-discovery-system.md"
+        },
+        {
+          "script": "test",
+          "file": ".codex/core/agent-specialization.md"
+        },
+        {
+          "script": "archive:create",
+          "file": ".codex/core/archive-management.md"
+        },
+        {
+          "script": "archive:check",
+          "file": ".codex/core/archive-management.md"
+        },
+        {
+          "script": "archive:status",
+          "file": ".codex/core/archive-management.md"
+        },
+        {
+          "script": "archive:search",
+          "file": ".codex/core/archive-management.md"
+        },
+        {
+          "script": "archive:restore",
+          "file": ".codex/core/archive-management.md"
+        },
+        {
+          "script": "archive:list",
+          "file": ".codex/core/archive-management.md"
+        },
+        {
+          "script": "archive:compare",
+          "file": ".codex/core/archive-management.md"
+        },
+        {
+          "script": "archive:create",
+          "file": ".codex/core/archive-management.md"
+        },
+        {
+          "script": "archive:batch",
+          "file": ".codex/core/archive-management.md"
+        },
+        {
+          "script": "archive:status",
+          "file": ".codex/core/archive-management.md"
+        },
+        {
+          "script": "archive:search",
+          "file": ".codex/core/archive-management.md"
+        },
+        {
+          "script": "archive:restore",
+          "file": ".codex/core/archive-management.md"
+        },
+        {
+          "script": "archive:cleanup",
+          "file": ".codex/core/archive-management.md"
+        },
+        {
+          "script": "archive:check",
+          "file": ".codex/core/archive-management.md"
+        },
+        {
+          "script": "archive:create",
+          "file": ".codex/core/archive-management.md"
+        },
+        {
+          "script": "archive:check-all",
+          "file": ".codex/core/archive-management.md"
+        },
+        {
+          "script": "archive:batch",
+          "file": ".codex/core/archive-management.md"
+        },
+        {
+          "script": "archive:update-index",
+          "file": ".codex/core/archive-management.md"
+        },
+        {
+          "script": "context:validate",
+          "file": ".codex/core/context-architecture.md"
+        },
+        {
+          "script": "context:monitor",
+          "file": ".codex/core/context-architecture.md"
+        },
+        {
+          "script": "context:compact",
+          "file": ".codex/core/context-architecture.md"
+        },
+        {
+          "script": "context:check-smart-zone",
+          "file": ".codex/core/context-architecture.md"
+        },
+        {
+          "script": "improvement:run",
+          "file": ".codex/core/continuous-improvement.md"
+        },
+        {
+          "script": "improvement:status",
+          "file": ".codex/core/continuous-improvement.md"
+        },
+        {
+          "script": "improvement:iterate",
+          "file": ".codex/core/continuous-improvement.md"
+        },
+        {
+          "script": "improvement:results",
+          "file": ".codex/core/continuous-improvement.md"
+        },
+        {
+          "script": "improvement:configure",
+          "file": ".codex/core/continuous-improvement.md"
+        },
+        {
+          "script": "observability:validate",
+          "file": ".codex/core/deep-observability.md"
+        },
+        {
+          "script": "observability:devtools",
+          "file": ".codex/core/deep-observability.md"
+        },
+        {
+          "script": "observability:temp-instances",
+          "file": ".codex/core/deep-observability.md"
+        },
+        {
+          "script": "observability:logs",
+          "file": ".codex/core/deep-observability.md"
+        },
+        {
+          "script": "observability:metrics",
+          "file": ".codex/core/deep-observability.md"
+        },
+        {
+          "script": "observability:traces",
+          "file": ".codex/core/deep-observability.md"
+        },
+        {
+          "script": "build:dev",
+          "file": ".codex/core/executable-guardrails.md"
+        },
+        {
+          "script": "i18n:check",
+          "file": ".codex/core/executable-guardrails.md"
+        },
+        {
+          "script": "prebuild",
+          "file": ".codex/core/executable-guardrails.md"
+        },
+        {
+          "script": "failure-modes:detect",
+          "file": ".codex/core/failure-modes.md"
+        },
+        {
+          "script": "failure-modes:check-one-shotting",
+          "file": ".codex/core/failure-modes.md"
+        },
+        {
+          "script": "failure-modes:check-premature-victory",
+          "file": ".codex/core/failure-modes.md"
+        },
+        {
+          "script": "failure-modes:check-premature-completion",
+          "file": ".codex/core/failure-modes.md"
+        },
+        {
+          "script": "failure-modes:check-startup",
+          "file": ".codex/core/failure-modes.md"
+        },
+        {
+          "script": "garbage:collect",
+          "file": ".codex/core/garbage-collection.md"
+        },
+        {
+          "script": "garbage:detect-dead-code",
+          "file": ".codex/core/garbage-collection.md"
+        },
+        {
+          "script": "garbage:detect-duplicates",
+          "file": ".codex/core/garbage-collection.md"
+        },
+        {
+          "script": "garbage:detect-outdated-docs",
+          "file": ".codex/core/garbage-collection.md"
+        },
+        {
+          "script": "garbage:cleanup-dependencies",
+          "file": ".codex/core/garbage-collection.md"
+        },
+        {
+          "script": "docs:validate",
+          "file": ".codex/core/harness-engineering-requirements.md"
+        },
+        {
+          "script": "lint:all",
+          "file": ".codex/core/harness-engineering-requirements.md"
+        },
+        {
+          "script": "harness:validate",
+          "file": ".codex/core/harness-engineering-requirements.md"
+        },
+        {
+          "script": "architecture:validate",
+          "file": ".codex/core/harness-engineering-requirements.md"
+        },
+        {
+          "script": "lint:architecture",
+          "file": ".codex/core/harness-engineering-requirements.md"
+        },
+        {
+          "script": "docs:validate",
+          "file": ".codex/core/harness-engineering-requirements.md"
+        },
+        {
+          "script": "ralph:loop",
+          "file": ".codex/core/harness-engineering-requirements.md"
+        },
+        {
+          "script": "build:dev",
+          "file": ".codex/core/observability.md"
+        },
+        {
+          "script": "architecture:validate",
+          "file": ".codex/core/strict-architecture-boundaries.md"
+        },
+        {
+          "script": "architecture:check-dependencies",
+          "file": ".codex/core/strict-architecture-boundaries.md"
+        },
+        {
+          "script": "architecture:check-providers",
+          "file": ".codex/core/strict-architecture-boundaries.md"
+        },
+        {
+          "script": "architecture:full-check",
+          "file": ".codex/core/strict-architecture-boundaries.md"
+        },
+        {
+          "script": "taste:check",
+          "file": ".codex/core/taste-invariants.md"
+        },
+        {
+          "script": "taste:logging",
+          "file": ".codex/core/taste-invariants.md"
+        },
+        {
+          "script": "taste:naming",
+          "file": ".codex/core/taste-invariants.md"
+        },
+        {
+          "script": "taste:file-size",
+          "file": ".codex/core/taste-invariants.md"
+        },
+        {
+          "script": "taste:complexity",
+          "file": ".codex/core/taste-invariants.md"
+        },
+        {
+          "script": "lint:architecture",
+          "file": ".codex/core/validation-matrix.md"
+        },
+        {
+          "script": "lint:taste",
+          "file": ".codex/core/validation-matrix.md"
+        },
+        {
+          "script": "lint:architecture:strict",
+          "file": ".codex/core/validation-matrix.md"
+        },
+        {
+          "script": "lint:taste:strict",
+          "file": ".codex/core/validation-matrix.md"
+        },
+        {
+          "script": "build:dev",
+          "file": ".codex/core/validation-matrix.md"
+        },
+        {
+          "script": "build:dev",
+          "file": ".codex/core/validation-matrix.md"
+        },
+        {
+          "script": "i18n:check",
+          "file": ".codex/core/validation-matrix.md"
+        },
+        {
+          "script": "build:dev",
+          "file": ".codex/core/validation-matrix.md"
+        },
+        {
+          "script": "build:dev",
+          "file": ".codex/core/validation-matrix.md"
+        },
+        {
+          "script": "generate:snapshots",
+          "file": ".codex/core/validation-matrix.md"
+        },
+        {
+          "script": "generate:routes",
+          "file": ".codex/core/validation-matrix.md"
+        },
+        {
+          "script": "generate:sitemap",
+          "file": ".codex/core/validation-matrix.md"
+        },
+        {
+          "script": "generate:prerender",
+          "file": ".codex/core/validation-matrix.md"
+        },
+        {
+          "script": "prebuild",
+          "file": ".codex/core/validation-matrix.md"
+        },
+        {
+          "script": "build:dev",
+          "file": ".codex/core/validation-matrix.md"
+        },
+        {
+          "script": "build:dev",
+          "file": ".codex/core/validation-matrix.md"
+        },
+        {
+          "script": "lint:architecture",
+          "file": ".codex/DEVELOPMENT_CHECKLIST.md"
+        },
+        {
+          "script": "lint:taste",
+          "file": ".codex/DEVELOPMENT_CHECKLIST.md"
+        },
+        {
+          "script": "context:validate",
+          "file": ".codex/IMPLEMENTATION_SUMMARY.md"
+        },
+        {
+          "script": "failure-modes:detect",
+          "file": ".codex/IMPLEMENTATION_SUMMARY.md"
+        },
+        {
+          "script": "observability:validate",
+          "file": ".codex/IMPLEMENTATION_SUMMARY.md"
+        },
+        {
+          "script": "garbage:collect",
+          "file": ".codex/IMPLEMENTATION_SUMMARY.md"
+        },
+        {
+          "script": "improvement:run",
+          "file": ".codex/IMPLEMENTATION_SUMMARY.md"
+        },
+        {
+          "script": "harness:validate",
+          "file": ".codex/IMPLEMENTATION_SUMMARY.md"
+        },
+        {
+          "script": "architecture:validate",
+          "file": ".codex/IMPLEMENTATION_SUMMARY.md"
+        },
+        {
+          "script": "docs:validate",
+          "file": ".codex/IMPLEMENTATION_SUMMARY.md"
+        },
+        {
+          "script": "quality:gates",
+          "file": ".codex/IMPLEMENTATION_SUMMARY.md"
+        },
+        {
+          "script": "context:validate",
+          "file": ".codex/IMPLEMENTATION_SUMMARY.md"
+        },
+        {
+          "script": "failure-modes:detect",
+          "file": ".codex/IMPLEMENTATION_SUMMARY.md"
+        },
+        {
+          "script": "taste:check",
+          "file": ".codex/IMPLEMENTATION_SUMMARY.md"
+        },
+        {
+          "script": "observability:validate",
+          "file": ".codex/IMPLEMENTATION_SUMMARY.md"
+        },
+        {
+          "script": "garbage:collect",
+          "file": ".codex/IMPLEMENTATION_SUMMARY.md"
+        },
+        {
+          "script": "improvement:run",
+          "file": ".codex/IMPLEMENTATION_SUMMARY.md"
+        },
+        {
+          "script": "ralph:loop",
+          "file": ".codex/IMPLEMENTATION_SUMMARY.md"
+        },
+        {
+          "script": "lint:all",
+          "file": ".codex/IMPLEMENTATION_SUMMARY.md"
+        },
+        {
+          "script": "architecture:full-check",
+          "file": ".codex/IMPLEMENTATION_SUMMARY.md"
+        },
+        {
+          "script": "observability:devtools",
+          "file": ".codex/IMPLEMENTATION_SUMMARY.md"
+        },
+        {
+          "script": "improvement:status",
+          "file": ".codex/IMPLEMENTATION_SUMMARY.md"
+        },
+        {
+          "script": "improvement:configure",
+          "file": ".codex/IMPLEMENTATION_SUMMARY.md"
+        },
+        {
+          "script": "prebuild",
+          "file": ".codex/LESSONS-LEARNED.md"
+        },
+        {
+          "script": "build:dev",
+          "file": ".codex/LESSONS-LEARNED.md"
+        },
+        {
+          "script": "build:dev",
+          "file": ".codex/LESSONS-LEARNED.md"
+        },
+        {
+          "script": "lint:architecture",
+          "file": ".codex/PROJECT-RULES.md"
+        },
+        {
+          "script": "lint:taste",
+          "file": ".codex/PROJECT-RULES.md"
+        },
+        {
+          "script": "lint:architecture",
+          "file": ".codex/README.md"
+        },
+        {
+          "script": "lint:taste",
+          "file": ".codex/README.md"
+        },
+        {
+          "script": "lint:architecture:strict",
+          "file": ".codex/README.md"
+        },
+        {
+          "script": "lint:taste:strict",
+          "file": ".codex/README.md"
+        },
+        {
+          "script": "build:dev",
+          "file": ".codex/templates/quick-prompt.md"
+        },
+        {
+          "script": "build:dev",
+          "file": ".codex/workflows/quick.md"
+        },
+        {
+          "script": "test",
+          "file": ".codex/workflows/ralph-loop.md"
+        },
+        {
+          "script": "test:coverage",
+          "file": ".codex/workflows/ralph-loop.md"
+        },
+        {
+          "script": "test:integration",
+          "file": ".codex/workflows/ralph-loop.md"
+        },
+        {
+          "script": "type-check",
+          "file": ".codex/workflows/ralph-loop.md"
+        },
+        {
+          "script": "format:check",
+          "file": ".codex/workflows/ralph-loop.md"
+        },
+        {
+          "script": "test:performance:bundle",
+          "file": ".codex/workflows/ralph-loop.md"
+        },
+        {
+          "script": "test:performance",
+          "file": ".codex/workflows/ralph-loop.md"
+        },
+        {
+          "script": "report:bundle",
+          "file": ".codex/workflows/ralph-loop.md"
+        },
+        {
+          "script": "test:i18n",
+          "file": ".codex/workflows/ralph-loop.md"
+        },
+        {
+          "script": "test:i18n:completeness",
+          "file": ".codex/workflows/ralph-loop.md"
+        },
+        {
+          "script": "test:design-tokens",
+          "file": ".codex/workflows/ralph-loop.md"
+        },
+        {
+          "script": "test:component-usage",
+          "file": ".codex/workflows/ralph-loop.md"
+        },
+        {
+          "script": "test:performance:vitals",
+          "file": ".codex/workflows/ralph-loop.md"
+        },
+        {
+          "script": "test:lighthouse",
+          "file": ".codex/workflows/ralph-loop.md"
+        },
+        {
+          "script": "test:performance:benchmark",
+          "file": ".codex/workflows/ralph-loop.md"
+        },
+        {
+          "script": "test:performance:memory",
+          "file": ".codex/workflows/ralph-loop.md"
+        },
+        {
+          "script": "test:jsdoc",
+          "file": ".codex/workflows/ralph-loop.md"
+        },
+        {
+          "script": "docs:api",
+          "file": ".codex/workflows/ralph-loop.md"
+        },
+        {
+          "script": "test:system-maps",
+          "file": ".codex/workflows/ralph-loop.md"
+        },
+        {
+          "script": "docs:architecture",
+          "file": ".codex/workflows/ralph-loop.md"
+        },
+        {
+          "script": "changelog:update",
+          "file": ".codex/workflows/ralph-loop.md"
+        },
+        {
+          "script": "version:check",
+          "file": ".codex/workflows/ralph-loop.md"
+        },
+        {
+          "script": "test",
+          "file": ".codex/workflows/ralph-loop.md"
+        },
+        {
+          "script": "type-check",
+          "file": ".codex/workflows/ralph-loop.md"
+        },
+        {
+          "script": "ralph:loop",
+          "file": ".codex/workflows/ralph-loop.md"
+        },
+        {
+          "script": "ralph:loop:quick",
+          "file": ".codex/workflows/ralph-loop.md"
+        },
+        {
+          "script": "ralph:check",
+          "file": ".codex/workflows/ralph-loop.md"
+        },
+        {
+          "script": "test:performance",
+          "file": ".codex/workflows/ralph-loop.md"
+        }
+      ]
+    }
+  ],
+  "errors": []
+}

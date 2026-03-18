@@ -122,18 +122,58 @@ async function waitForRecentExtractionsToContain(extensionPage: any, url: string
   throw new Error(`Timed out waiting for recent extractions to include ${url}`);
 }
 
-async function storeExtractionViaDebug(extensionPage: any, url: string, pageTitle: string, table: string[][]): Promise<void> {
+async function storeExtractionViaDebug(
+  extensionPage: any,
+  url: string,
+  pageTitle: string,
+  table: string[][],
+): Promise<{ extractionId: number; domain: string }> {
   await extensionPage.waitForFunction(() => Boolean((window as any).__tableExtractDebug?.storeExtraction), { timeout: 20_000 });
-  await Promise.race([
+  const result = await Promise.race([
     extensionPage.evaluate(
       async ({ url, pageTitle, table }) => {
         const dbg = (window as any).__tableExtractDebug;
-        await dbg.storeExtraction({ url, pageTitle, table });
+        return await dbg.storeExtraction({ url, pageTitle, table });
       },
       { url, pageTitle, table },
     ),
     new Promise((_, reject) => setTimeout(() => reject(new Error('Timed out calling debug.storeExtraction()')), 30_000)),
   ]);
+  if (!result || typeof (result as any).extractionId !== 'number') throw new Error('Debug storeExtraction returned unexpected result');
+  return result as any;
+}
+
+async function setDomainEnabledViaDebug(extensionPage: any, domain: string, enabled: boolean): Promise<void> {
+  await extensionPage.waitForFunction(() => Boolean((window as any).__tableExtractDebug?.setDomainEnabled), { timeout: 20_000 });
+  await extensionPage.evaluate(
+    async ({ domain, enabled }) => {
+      const dbg = (window as any).__tableExtractDebug;
+      await dbg.setDomainEnabled(domain, enabled);
+    },
+    { domain, enabled },
+  );
+}
+
+async function waitForPopupLoaded(extensionPage: any): Promise<void> {
+  await extensionPage.waitForFunction(() => Boolean((window as any).__tableExtractDebug), { timeout: 20_000 });
+  // App-level loading skeleton (scrape in progress).
+  await extensionPage.waitForFunction(() => !document.querySelector('.skeleton-results'), { timeout: 30_000 });
+}
+
+async function waitForHistoryLoaded(extensionPage: any): Promise<void> {
+  // History component has its own async load.
+  const loading = extensionPage.getByText('Loading history…');
+  await expect(loading).toHaveCount(0, { timeout: 30_000 });
+  // History now uses internal tabs; ensure they're present.
+  await expect(extensionPage.getByTestId('history-tab-results')).toBeVisible({ timeout: 30_000 });
+}
+
+async function gotoHistoryTab(extensionPage: any, tab: 'results' | 'details' | 'data'): Promise<void> {
+  const testId =
+    tab === 'results' ? 'history-tab-results' :
+    tab === 'details' ? 'history-tab-details' :
+    'history-tab-data';
+  await extensionPage.getByTestId(testId).click({ timeout: 20_000 });
 }
 
 test('manual opt-in enables domain auto-capture on subsequent URLs', async () => {
@@ -228,25 +268,29 @@ test('manual opt-in enables domain auto-capture on subsequent URLs', async () =>
   // Important: do NOT focus the extension tab before the initial scrap request;
   // the background script relies on "current tab" being the active web page tab.
   await extPage.goto(extensionUrl, { waitUntil: 'domcontentloaded' });
+  await waitForPopupLoaded(extPage);
 
-  // Trigger store by clicking the UI button.
-  const sqliteBtn = extPage.locator('.sqlite-btn');
-  await expect(sqliteBtn).toBeVisible();
-  await sqliteBtn.click();
-  // Give async storage write a moment; we'll also poll in openDbFromExtensionStorage.
-  await extPage.waitForTimeout(500);
+  // Store once and opt-in domain via debug API (avoid current-tab focus races).
+  await storeExtractionViaDebug(extPage, url1, 'Products 1', [
+    ['Name', 'Age'],
+    ['Alice', '30'],
+    ['Bob', '40'],
+  ]);
+  await setDomainEnabledViaDebug(extPage, 'example.test', true);
 
   // Second URL: no click; open the popup again to trigger scrap + auto-capture.
   await appPage.goto(url2, { waitUntil: 'domcontentloaded' });
   await appPage.bringToFront();
   await extPage.goto(extensionUrl, { waitUntil: 'domcontentloaded' });
+  await waitForPopupLoaded(extPage);
 
   const urls = await waitForExtractionUrlsToContain(extPage, url2);
   expect(urls).toEqual([url1, url2]);
 
   // Disable auto-capture before writing /users/* to avoid double writes.
   await extPage.getByRole('button', { name: 'History' }).click();
-  await expect(extPage.getByTestId('section-data-management')).toBeVisible();
+  await waitForHistoryLoaded(extPage);
+  await gotoHistoryTab(extPage, 'data');
   await expect(extPage.getByText('example.test', { exact: true })).toBeVisible();
   await extPage.getByRole('button', { name: 'Disable auto-capture' }).click();
   await expect(extPage.getByRole('button', { name: 'Enable auto-capture' })).toBeVisible();
@@ -255,6 +299,7 @@ test('manual opt-in enables domain auto-capture on subsequent URLs', async () =>
   await appPage.goto(url3, { waitUntil: 'domcontentloaded' });
   await appPage.bringToFront();
   await extPage.goto(extensionUrl, { waitUntil: 'domcontentloaded' });
+  await waitForPopupLoaded(extPage);
   // Store via debug API to avoid current-tab focus races in automated runs.
   await storeExtractionViaDebug(extPage, url3, 'Users 1', [
     ['Username', 'Role'],
@@ -263,10 +308,38 @@ test('manual opt-in enables domain auto-capture on subsequent URLs', async () =>
   const urls3 = await waitForExtractionUrlsToContain(extPage, url3);
   expect(urls3).toEqual([url1, url2, url3]);
 
+  // Dedup (pilot): enabling dedup should skip identical-to-last for the same bucket.
+  await extPage.waitForFunction(() => Boolean((window as any).__tableExtractDebug?.setDedupPolicy), { timeout: 20_000 });
+  await extPage.evaluate(async () => {
+    const dbg = (window as any).__tableExtractDebug;
+    await dbg.setDedupPolicy({ enabled: true, mode: 'identical_to_last' });
+  });
+
+  // Store identical-to-last payload again: should be skipped (returns same extraction id).
+  const r1 = await storeExtractionViaDebug(extPage, url2, 'Products 2', [
+    ['Name', 'Age'],
+    ['Charlie', '50'],
+  ]);
+
+  // Store changed payload: should create a new extraction (new id).
+  const r2 = await storeExtractionViaDebug(extPage, url2, 'Products 2', [
+    ['Name', 'Age'],
+    ['Charlie', '51'],
+  ]);
+  expect(r2.extractionId).not.toEqual(r1.extractionId);
+
+  // Store the same changed payload again: should be skipped (same id as r2).
+  const r3 = await storeExtractionViaDebug(extPage, url2, 'Products 2', [
+    ['Name', 'Age'],
+    ['Charlie', '51'],
+  ]);
+  expect(r3.extractionId).toEqual(r2.extractionId);
+
   // History UI: verify stored extractions are visible and preview can be opened.
   await extPage.getByRole('button', { name: 'History' }).click();
+  await waitForHistoryLoaded(extPage);
   await waitForExtractionUrlsToContain(extPage, url2);
-  await expect(extPage.getByText(url2)).toBeVisible({ timeout: 20_000 });
+  await expect(extPage.getByText(url2)).toHaveCount(2, { timeout: 20_000 });
   await expect(extPage.getByText(url1)).toBeVisible();
   await expect(extPage.getByText(url3)).toBeVisible();
 
@@ -281,7 +354,7 @@ test('manual opt-in enables domain auto-capture on subsequent URLs', async () =>
   await patternSelect1.selectOption('/products');
   await extPage.getByPlaceholder('/path').fill('products/2');
   await extPage.getByRole('button', { name: 'Apply filters' }).click();
-  await expect(extPage.getByText(url2)).toBeVisible();
+  await expect(extPage.getByText(url2)).toHaveCount(2);
   await expect(extPage.getByText(url1)).toHaveCount(0);
   await expect(extPage.getByText(url3)).toHaveCount(0);
 
@@ -312,7 +385,9 @@ test('manual opt-in enables domain auto-capture on subsequent URLs', async () =>
 
   // Re-open popup and History to reset selection state.
   await extPage.goto(extensionUrl, { waitUntil: 'domcontentloaded' });
+  await waitForPopupLoaded(extPage);
   await extPage.getByRole('button', { name: 'History' }).click();
+  await waitForHistoryLoaded(extPage);
   await waitForExtractionUrlsToContain(extPage, url3);
 
   // Schema pinning: pin active schema for /products bucket and ensure products URLs remain visible.
@@ -402,18 +477,21 @@ test('domain controls: disable auto-capture and delete domain data', async () =>
     await route.fulfill({ status: 404, contentType: 'text/html', body: '<html>not found</html>' });
   });
 
-  // Opt-in by saving once.
+  // Opt-in by storing once + enabling domain (debug API is more deterministic).
   await appPage.goto(url1, { waitUntil: 'domcontentloaded' });
   await appPage.bringToFront();
   await extPage.goto(extensionUrl, { waitUntil: 'domcontentloaded' });
-  const sqliteBtn = extPage.locator('.sqlite-btn');
-  await expect(sqliteBtn).toBeVisible();
-  await sqliteBtn.click();
-  await extPage.waitForTimeout(500);
+  await waitForPopupLoaded(extPage);
+  await storeExtractionViaDebug(extPage, url1, 'Page 1', [
+    ['Name', 'Age'],
+    ['Alice', '30'],
+  ]);
+  await setDomainEnabledViaDebug(extPage, domain, true);
 
   // Disable auto-capture for the domain in History.
   await extPage.getByRole('button', { name: 'History' }).click();
-  await expect(extPage.getByTestId('section-data-management')).toBeVisible();
+  await waitForHistoryLoaded(extPage);
+  await gotoHistoryTab(extPage, 'data');
   await expect(extPage.getByText(domain, { exact: true })).toBeVisible();
   await extPage.getByRole('button', { name: 'Disable auto-capture' }).click();
   await expect(extPage.getByRole('button', { name: 'Enable auto-capture' })).toBeVisible();
@@ -422,15 +500,18 @@ test('domain controls: disable auto-capture and delete domain data', async () =>
   await appPage.goto(url2, { waitUntil: 'domcontentloaded' });
   await appPage.bringToFront();
   await extPage.goto(extensionUrl, { waitUntil: 'domcontentloaded' });
-  await expect(extPage.locator('.sqlite-btn')).toBeVisible();
+  await waitForPopupLoaded(extPage);
   const urlsAfterDisable = await listExtractionUrlsFromDebug(extPage);
   expect(urlsAfterDisable).toEqual([url1]);
 
   // Delete domain data.
   await extPage.getByRole('button', { name: 'History' }).click();
+  await waitForHistoryLoaded(extPage);
+  await gotoHistoryTab(extPage, 'data');
   await expect(extPage.getByText(domain, { exact: true })).toBeVisible();
   await extPage.getByTestId('delete-domain').click();
   await extPage.getByTestId('delete-domain-confirm').click();
+  await gotoHistoryTab(extPage, 'results');
   await expect(extPage.getByText('No saved extractions yet.')).toBeVisible();
 
   // Verify DB is cleared for that domain.
@@ -489,22 +570,139 @@ test('clear all removes all local data', async () => {
   await appPage.goto(url1, { waitUntil: 'domcontentloaded' });
   await appPage.bringToFront();
   await extPage.goto(extensionUrl, { waitUntil: 'domcontentloaded' });
-  await expect(extPage.locator('.sqlite-btn')).toBeVisible();
-  await extPage.locator('.sqlite-btn').click();
-  await extPage.waitForTimeout(500);
+  await waitForPopupLoaded(extPage);
+  await storeExtractionViaDebug(extPage, url1, 'Page 1', [
+    ['Name', 'Age'],
+    ['Alice', '30'],
+  ]);
   expect(await listExtractionUrlsFromDebug(extPage)).toEqual([url1]);
 
   // Clear all.
   await extPage.getByRole('button', { name: 'History' }).click();
-  await expect(extPage.getByTestId('section-data-management')).toBeVisible();
+  await waitForHistoryLoaded(extPage);
+  await gotoHistoryTab(extPage, 'data');
   await extPage.getByTestId('clear-all').click();
   await extPage.getByTestId('clear-all-confirm').click();
+  await gotoHistoryTab(extPage, 'results');
   await expect(extPage.getByText('No saved extractions yet.')).toBeVisible();
 
   // DB should now be empty.
   const urls = await listExtractionUrlsFromDebug(extPage);
   expect(urls).toEqual([]);
   await expect(extPage.getByText('example.test', { exact: true })).toHaveCount(0);
+
+  await context.close();
+});
+
+test('backup and restore keeps history and exports', async () => {
+  const userDataDir = mkdtempSync(join(tmpdir(), 'table-extract-pw-'));
+  const extensionPath = resolve(process.cwd(), 'dist');
+
+  const context = await chromium.launchPersistentContext(userDataDir, {
+    headless: false,
+    channel: 'chromium',
+    args: [
+      `--disable-extensions-except=${extensionPath}`,
+      `--load-extension=${extensionPath}`,
+      '--no-first-run',
+      '--no-default-browser-check',
+    ],
+  });
+
+  const extensionId = await getExtensionIdFromContext(context);
+  const extensionUrl = `chrome-extension://${extensionId}/index.html`;
+
+  const appPage = await context.newPage();
+  const extPage = await context.newPage();
+
+  const url1 = 'https://example.test/page-1';
+  const html1 = `
+    <html><head><title>Page 1</title></head>
+    <body>
+      <table>
+        <tr><th>Name</th><th>Age</th></tr>
+        <tr><td>Alice</td><td>30</td></tr>
+      </table>
+    </body></html>
+  `;
+
+  await appPage.route('**/*', async (route) => {
+    const reqUrl = route.request().url();
+    if (reqUrl === url1) {
+      await route.fulfill({ status: 200, contentType: 'text/html', body: html1 });
+      return;
+    }
+    if (route.request().resourceType() !== 'document') {
+      await route.abort();
+      return;
+    }
+    await route.fulfill({ status: 404, contentType: 'text/html', body: '<html>not found</html>' });
+  });
+
+  // Store once so there is data to back up.
+  await appPage.goto(url1, { waitUntil: 'domcontentloaded' });
+  await appPage.bringToFront();
+  await extPage.goto(extensionUrl, { waitUntil: 'domcontentloaded' });
+  await waitForPopupLoaded(extPage);
+  await storeExtractionViaDebug(extPage, url1, 'Page 1', [
+    ['Name', 'Age'],
+    ['Alice', '30'],
+  ]);
+  expect(await listExtractionUrlsFromDebug(extPage)).toEqual([url1]);
+
+  // Go to History, download DB backup.
+  await extPage.getByRole('button', { name: 'History' }).click();
+  await waitForHistoryLoaded(extPage);
+  await gotoHistoryTab(extPage, 'data');
+  await expect(extPage.getByTestId('db-backup-download')).toBeVisible();
+
+  const backupDownloadPromise = extPage.waitForEvent('download', { timeout: 20_000 });
+  await extPage.getByTestId('db-backup-download').click();
+  const backupDownload = await backupDownloadPromise;
+  const backupPath = join(tmpdir(), `table-extract-backup-${Date.now()}.sqlite`);
+  await Promise.race([
+    backupDownload.saveAs(backupPath),
+    new Promise((_, reject) => setTimeout(() => reject(new Error('Timed out saving backup download')), 20_000)),
+  ]);
+
+  // Clear all.
+  await extPage.getByTestId('clear-all').click();
+  await extPage.getByTestId('clear-all-confirm').click();
+  await gotoHistoryTab(extPage, 'results');
+  await expect(extPage.getByText('No saved extractions yet.')).toBeVisible();
+  expect(await listExtractionUrlsFromDebug(extPage)).toEqual([]);
+
+  // Restore from backup file.
+  await gotoHistoryTab(extPage, 'data');
+  await expect(extPage.getByTestId('db-backup-restore-input')).toHaveCount(1);
+  await extPage.getByTestId('db-backup-restore-input').setInputFiles(backupPath);
+  await expect(extPage.getByText('Restore complete.')).toBeVisible({ timeout: 20_000 });
+
+  // History should contain the original URL again.
+  await gotoHistoryTab(extPage, 'results');
+  await waitForRecentExtractionsToContain(extPage, url1);
+  const urlsAfterRestore = await listExtractionUrlsFromDebug(extPage);
+  expect(urlsAfterRestore).toEqual([url1]);
+  await expect(extPage.getByText(url1)).toBeVisible();
+
+  // Export parity: open the entry and validate JSON download content.
+  const openButtons = extPage.getByTestId('open-result');
+  await expect(openButtons.first()).toBeVisible();
+  await openButtons.first().click();
+  await expect(extPage.getByTestId('download-json')).toBeVisible();
+
+  const jsonDownloadPromise = extPage.waitForEvent('download', { timeout: 20_000 });
+  await extPage.getByTestId('download-json').click();
+  const jsonDownload = await jsonDownloadPromise;
+  const jsonPath = join(tmpdir(), `table-extract-restore-${Date.now()}.json`);
+  await Promise.race([
+    jsonDownload.saveAs(jsonPath),
+    new Promise((_, reject) => setTimeout(() => reject(new Error('Timed out saving json download')), 20_000)),
+  ]);
+  const jsonText = readFileSync(jsonPath, 'utf-8');
+  const parsed = JSON.parse(jsonText);
+  expect(parsed.headers).toEqual(['Name', 'Age']);
+  expect(JSON.stringify(parsed.rows)).toContain('Alice');
 
   await context.close();
 });

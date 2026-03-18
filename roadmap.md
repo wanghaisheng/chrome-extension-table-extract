@@ -22,15 +22,11 @@ This roadmap focuses on a **local-first** workflow: extracted data is persisted 
 - Schema scope: version streams are scoped by (domain + url pattern) buckets (e.g. `/products/*` vs `/users/*`).
 - Automated tests: Playwright E2E (opt-in/auto-capture + controls + clear-all) + unit tests (SQLite core + retention).
 
-## Next (0.2) – Retrieval & export without leaving the extension
-
-**Goal**: local storage becomes useful for reuse, not just archiving.
-
-- (shipped in 0.1.x; see “Now”)
-
 ## Mid-term (0.3) – Performance, reliability, and dedup
 
 **Goal**: safe scaling for heavier use.
+
+- Change record: `openspec/changes/performance-reliability-and-dedup/` (planned)
 
 - **Dedup strategy**
   - optional "skip storing if identical to last extraction" (hash rows)

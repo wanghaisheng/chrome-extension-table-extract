@@ -4,11 +4,95 @@ import { IDBMinimalVFS } from 'wa-sqlite/src/examples/IDBMinimalVFS.js';
 
 import { SQLiteExtractPayload } from './types';
 import { computeExtractionIdsToDeleteKeepLastPerDomain } from './retention';
+import { computeExtractionContentHash, shouldSkipStoreByLastHash } from './dedup';
+import { getDedupPolicy } from './storage';
 
 type SQLiteApi = ReturnType<typeof SQLite.Factory>;
 
 let SQLITE_PROMISE: Promise<{ sqlite3: SQLiteApi; db: number }> | null = null;
 let DB_LOCK: Promise<void> = Promise.resolve();
+let VFS_INSTANCE: IDBMinimalVFS | null = null;
+
+const VFS_IDB_NAME = 'table_extract_idb_vfs';
+const VFS_DB_PATH = '/table_extract.db';
+
+type VfsBlock = { path: string; offset: number; data: Uint8Array };
+
+function openVfsIdb(): Promise<IDBDatabase> {
+  return new Promise((resolve, reject) => {
+    const req = indexedDB.open(VFS_IDB_NAME, 1);
+    req.addEventListener('upgradeneeded', () => {
+      const db = req.result;
+      if (!db.objectStoreNames.contains('blocks')) {
+        db.createObjectStore('blocks', { keyPath: ['path', 'offset'] });
+      }
+    });
+    req.addEventListener('success', () => resolve(req.result));
+    req.addEventListener('error', () => reject(req.error));
+  });
+}
+
+function txDone(tx: IDBTransaction): Promise<void> {
+  return new Promise((resolve, reject) => {
+    tx.addEventListener('complete', () => resolve());
+    tx.addEventListener('abort', () => reject(tx.error));
+    tx.addEventListener('error', () => reject(tx.error));
+  });
+}
+
+async function listBlocksForPath(db: IDBDatabase, path: string): Promise<VfsBlock[]> {
+  const tx = db.transaction('blocks', 'readonly');
+  const store = tx.objectStore('blocks');
+  const range = IDBKeyRange.bound([path, -Infinity], [path, Infinity]);
+  const out: VfsBlock[] = [];
+
+  await new Promise<void>((resolve, reject) => {
+    const req = store.openCursor(range);
+    req.addEventListener('success', () => {
+      const cursor = req.result as IDBCursorWithValue | null;
+      if (!cursor) return resolve();
+      out.push(cursor.value as VfsBlock);
+      cursor.continue();
+    });
+    req.addEventListener('error', () => reject(req.error));
+  });
+
+  await txDone(tx);
+  return out;
+}
+
+async function deleteBlocksForPath(db: IDBDatabase, path: string): Promise<void> {
+  const tx = db.transaction('blocks', 'readwrite');
+  const store = tx.objectStore('blocks');
+  const range = IDBKeyRange.bound([path, -Infinity], [path, Infinity]);
+
+  await new Promise<void>((resolve, reject) => {
+    const req = store.openCursor(range);
+    req.addEventListener('success', () => {
+      const cursor = req.result as IDBCursorWithValue | null;
+      if (!cursor) return resolve();
+      cursor.delete();
+      cursor.continue();
+    });
+    req.addEventListener('error', () => reject(req.error));
+  });
+
+  await txDone(tx);
+}
+
+async function writeBytesAsBlocks(db: IDBDatabase, path: string, bytes: Uint8Array): Promise<void> {
+  const tx = db.transaction('blocks', 'readwrite');
+  const store = tx.objectStore('blocks');
+  const chunkSize = 256 * 1024;
+
+  for (let i = 0; i < bytes.length; i += chunkSize) {
+    const chunk = bytes.slice(i, i + chunkSize);
+    const block: VfsBlock = { path, offset: -i, data: chunk };
+    store.put(block);
+  }
+
+  await txDone(tx);
+}
 
 async function withDbLock<T>(fn: () => Promise<T>): Promise<T> {
   const prev = DB_LOCK;
@@ -30,13 +114,51 @@ async function execWithParams(sqlite3: SQLiteApi, db: number, sql: string, param
   return await sqlite3.execWithParams(db, sql, params);
 }
 
+async function insertExtractionCellsBatched(
+  sqlite3: SQLiteApi,
+  db: number,
+  extractionId: number,
+  tableRows: string[][],
+): Promise<void> {
+  // SQLite default max variables is commonly 999. Each cell insert uses 4 vars.
+  // Keep a buffer to stay below limits even if runtime differs.
+  const maxVars = 900;
+  const varsPerCell = 4;
+  const maxCellsPerChunk = Math.max(1, Math.floor(maxVars / varsPerCell));
+
+  type Cell = { r: number; c: number; v: string | null };
+  const cells: Cell[] = [];
+  for (let r = 0; r < tableRows.length; r++) {
+    const row = tableRows[r] ?? [];
+    for (let c = 0; c < row.length; c++) {
+      cells.push({ r, c, v: (row[c] ?? null) as any });
+    }
+  }
+
+  for (let i = 0; i < cells.length; i += maxCellsPerChunk) {
+    const chunk = cells.slice(i, i + maxCellsPerChunk);
+    const valuesSql = chunk.map(() => `(?, ?, ?, ?)`).join(', ');
+    const params: any[] = [];
+    for (const cell of chunk) {
+      params.push(extractionId, cell.r, cell.c, cell.v);
+    }
+    await run(
+      sqlite3,
+      db,
+      `INSERT INTO extraction_cells (extraction_id, row_index, col_index, value) VALUES ${valuesSql}`,
+      params,
+    );
+  }
+}
+
 async function getClient(): Promise<{ sqlite3: SQLiteApi; db: number }> {
   if (!SQLITE_PROMISE) {
     SQLITE_PROMISE = (async () => {
       const module = await SQLiteESMFactory();
       const sqlite3 = SQLite.Factory(module as any);
 
-      const vfs = new IDBMinimalVFS('table_extract_idb_vfs');
+      const vfs = new IDBMinimalVFS(VFS_IDB_NAME);
+      VFS_INSTANCE = vfs;
       sqlite3.vfs_register(vfs as any, true);
 
       const db = await sqlite3.open_v2('table_extract.db', undefined as any, vfs.name);
@@ -77,6 +199,7 @@ async function getClient(): Promise<{ sqlite3: SQLiteApi; db: number }> {
           page_title   TEXT,
           extracted_at INTEGER NOT NULL,
           row_count    INTEGER NOT NULL,
+          content_hash TEXT,
           FOREIGN KEY(schema_id) REFERENCES schemas(id)
         );
 
@@ -92,6 +215,18 @@ async function getClient(): Promise<{ sqlite3: SQLiteApi; db: number }> {
         CREATE INDEX IF NOT EXISTS idx_extraction_row_col
           ON extraction_cells (extraction_id, row_index, col_index);
 
+        CREATE INDEX IF NOT EXISTS idx_domains_domain
+          ON domains (domain);
+
+        CREATE INDEX IF NOT EXISTS idx_schemas_domain_pattern_version
+          ON schemas (domain_id, url_pattern, version);
+
+        CREATE INDEX IF NOT EXISTS idx_extractions_schema_time
+          ON extractions (schema_id, extracted_at);
+
+        CREATE INDEX IF NOT EXISTS idx_extractions_url
+          ON extractions (url);
+
         -- Migration: url_pattern should be non-null for reliable param binding.
         UPDATE schemas SET url_pattern = '/' WHERE url_pattern IS NULL;
       `);
@@ -100,6 +235,26 @@ async function getClient(): Promise<{ sqlite3: SQLiteApi; db: number }> {
     })();
   }
   return SQLITE_PROMISE;
+}
+
+async function closeClientForRestore(): Promise<void> {
+  if (!SQLITE_PROMISE) return;
+  try {
+    const { sqlite3, db } = await SQLITE_PROMISE;
+    try {
+      await sqlite3.close(db);
+    } catch {
+      // ignore
+    }
+  } finally {
+    try {
+      await VFS_INSTANCE?.close();
+    } catch {
+      // ignore
+    }
+    VFS_INSTANCE = null;
+    SQLITE_PROMISE = null;
+  }
 }
 
 function nowMs(): number {
@@ -230,6 +385,7 @@ async function getOrCreateSchemaId(
 export async function storeExtraction(payload: SQLiteExtractPayload): Promise<{ extractionId: number; domain: string }> {
   return await withDbLock(async () => {
     const { sqlite3, db } = await getClient();
+    const dedup = await getDedupPolicy();
 
     await run(sqlite3, db, 'BEGIN');
     try {
@@ -239,32 +395,59 @@ export async function storeExtraction(payload: SQLiteExtractPayload): Promise<{ 
       const headers = payload.table[0] ?? [];
       const schemaId = await getOrCreateSchemaId(sqlite3, db, domainId, urlPattern, headers);
 
+      const contentHash = computeExtractionContentHash(payload.table);
+      if (dedup.enabled) {
+        try {
+          const last = await execWithParams(
+            sqlite3,
+            db,
+            `SELECT id, content_hash FROM extractions WHERE schema_id = ? ORDER BY id DESC LIMIT 1`,
+            [schemaId],
+          );
+          const row = last.rows?.[0] as any[] | undefined;
+          const lastId = row?.[0] != null ? Number(row[0]) : null;
+          const lastHash = row?.[1] != null ? String(row[1]) : null;
+          if (lastId && shouldSkipStoreByLastHash(dedup.mode, lastHash, contentHash)) {
+            // End the transaction cleanly even though we made no writes.
+            await run(sqlite3, db, 'COMMIT');
+            return { extractionId: lastId, domain };
+          }
+        } catch {
+          // Best-effort: older DBs may not have content_hash column; skip dedup in that case.
+        }
+      }
+
       const rowCount = Math.max(0, payload.table.length - 1);
-      await run(
-        sqlite3,
-        db,
-        `INSERT INTO extractions (schema_id, url, page_title, extracted_at, row_count) VALUES (?, ?, ?, ?, ?)`,
-        [schemaId, payload.url, payload.pageTitle ?? null, nowMs(), rowCount],
-      );
+      try {
+        await run(
+          sqlite3,
+          db,
+          `INSERT INTO extractions (schema_id, url, page_title, extracted_at, row_count, content_hash) VALUES (?, ?, ?, ?, ?, ?)`,
+          [schemaId, payload.url, payload.pageTitle ?? null, nowMs(), rowCount, contentHash],
+        );
+      } catch {
+        // Best-effort: older DBs may not have content_hash column.
+        await run(
+          sqlite3,
+          db,
+          `INSERT INTO extractions (schema_id, url, page_title, extracted_at, row_count) VALUES (?, ?, ?, ?, ?)`,
+          [schemaId, payload.url, payload.pageTitle ?? null, nowMs(), rowCount],
+        );
+      }
       const extractionId = await selectFirstInt(sqlite3, db, `SELECT last_insert_rowid()`, []);
       if (!extractionId) throw new Error('Failed to insert extraction');
 
       const rows = payload.table.slice(1);
-      for (let r = 0; r < rows.length; r++) {
-        for (let c = 0; c < rows[r].length; c++) {
-          await run(
-            sqlite3,
-            db,
-            `INSERT INTO extraction_cells (extraction_id, row_index, col_index, value) VALUES (?, ?, ?, ?)`,
-            [extractionId, r, c, rows[r][c] ?? null],
-          );
-        }
-      }
+      await insertExtractionCellsBatched(sqlite3, db, extractionId, rows);
 
       await run(sqlite3, db, 'COMMIT');
       return { extractionId, domain };
     } catch (e) {
-      await run(sqlite3, db, 'ROLLBACK');
+      try {
+        await run(sqlite3, db, 'ROLLBACK');
+      } catch {
+        // ignore rollback failures (e.g. no active transaction)
+      }
       throw e;
     }
   });
@@ -643,6 +826,48 @@ export async function applyRetentionKeepLastPerDomain(keepLastPerDomain: number)
     } catch (e) {
       await run(sqlite3, db, 'ROLLBACK');
       throw e;
+    }
+  });
+}
+
+export async function exportDbBytes(): Promise<Uint8Array | null> {
+  return await withDbLock(async () => {
+    const idb = await openVfsIdb();
+    try {
+      const blocks = await listBlocksForPath(idb, VFS_DB_PATH);
+      if (blocks.length === 0) return null;
+
+      // Blocks are keyed by [path, offset] where offset is -iOffset.
+      // The smallest offset (most negative) corresponds to the last chunk and allows deriving file size.
+      const last = blocks[0]!;
+      const fileSize = Math.max(0, (last.data?.byteLength ?? 0) - (last.offset ?? 0));
+      const out = new Uint8Array(fileSize);
+
+      for (const b of blocks) {
+        const iOffset = -Number(b.offset ?? 0);
+        const data = b.data;
+        if (!data || !Number.isFinite(iOffset) || iOffset < 0) continue;
+        if (iOffset >= out.length) continue;
+        out.set(data.subarray(0, out.length - iOffset), iOffset);
+      }
+
+      return out;
+    } finally {
+      idb.close();
+    }
+  });
+}
+
+export async function restoreDbBytes(bytes: Uint8Array): Promise<void> {
+  return await withDbLock(async () => {
+    await closeClientForRestore();
+
+    const idb = await openVfsIdb();
+    try {
+      await deleteBlocksForPath(idb, VFS_DB_PATH);
+      await writeBytesAsBlocks(idb, VFS_DB_PATH, bytes);
+    } finally {
+      idb.close();
     }
   });
 }

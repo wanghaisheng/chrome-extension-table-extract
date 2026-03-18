@@ -104,6 +104,7 @@ Break work down further or escalate to `BMM` when:
 - inputs or outputs are still fuzzy
 - dependency resolution is still implicit
 - the task is named by module or page only, without a deterministic interface
+- the request implies batch rollout or repeated edits across many targets (use pilot-first promotion)
 
 ## Record Rule
 
@@ -123,3 +124,13 @@ If the repository also keeps a higher-level WBS artifact:
 - if a task starts in `Quick`, the milestone should usually be short enough to restate in one or two sentences
 - prefer splitting by deterministic interface, not by loose file ownership alone
 - if a unit cannot be handed to another implementer as a self-contained packet, split or package it again
+
+## Batch Requests (pilot then promote)
+
+When the user asks for bulk rollout ("批量"/"推广"/"apply everywhere"):
+
+- do not treat it as one milestone even if each edit is small
+- route to `BMM`, create a change packet, and model:
+  - pilot milestone (small representative set)
+  - promotion milestones (increasing batches)
+- apply the stop/rollback discipline and failure loop in `.codex/core/pilot-promotion.md`

@@ -81,3 +81,12 @@ If both an active change record and a repo-level WBS artifact exist:
 - use `work-breakdown.md` for mode mapping and escalation rules
 - use `milestone-design.md` to design the current Level 3 milestone in detail
 - use `task-packaging.md` before implementation starts
+
+## Batch Work Rule (pilot then promote)
+
+When the work is a bulk rollout (many files/components/domains) or a promotion of the same change across multiple targets:
+
+- model the pilot and each promotion step as separate Level 3 milestones
+- keep each milestone inside the usual reviewable envelope (size + one validation story)
+- treat any failed batch as a stop condition: pause, debug, adjust the method, and re-validate before expanding
+- use `.codex/core/pilot-promotion.md` as the default methodology for batch/promotion work

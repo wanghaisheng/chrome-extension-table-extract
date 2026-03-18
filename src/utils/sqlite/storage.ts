@@ -1,12 +1,18 @@
 const DB_STORAGE_KEY = 'table_extract_sqlite_db_v1';
 const ENABLED_DOMAINS_KEY = 'table_extract_sqlite_enabled_domains_v1';
 const RETENTION_POLICY_KEY = 'table_extract_sqlite_retention_policy_v1';
+const DEDUP_POLICY_KEY = 'table_extract_sqlite_dedup_policy_v1';
 const PINNED_SCHEMA_KEY = 'table_extract_sqlite_pinned_schema_per_domain_and_pattern_v1';
 const PINNED_SCHEMA_KEY_LEGACY = 'table_extract_sqlite_pinned_schema_per_domain_v1';
 
 export type RetentionPolicy = {
   enabled: boolean;
   keepLastPerDomain: number;
+};
+
+export type DedupPolicy = {
+  enabled: boolean;
+  mode: 'identical_to_last';
 };
 
 export async function getEnabledDomains(): Promise<Record<string, true>> {
@@ -48,10 +54,25 @@ export async function setRetentionPolicy(policy: RetentionPolicy): Promise<void>
   await chrome.storage.local.set({ [RETENTION_POLICY_KEY]: policy });
 }
 
+export async function getDedupPolicy(): Promise<DedupPolicy> {
+  const res = await chrome.storage.local.get(DEDUP_POLICY_KEY);
+  const raw = res?.[DEDUP_POLICY_KEY] as Partial<DedupPolicy> | undefined;
+  const mode = raw?.mode === 'identical_to_last' ? raw.mode : 'identical_to_last';
+  return {
+    enabled: Boolean(raw?.enabled ?? false),
+    mode,
+  };
+}
+
+export async function setDedupPolicy(policy: DedupPolicy): Promise<void> {
+  await chrome.storage.local.set({ [DEDUP_POLICY_KEY]: policy });
+}
+
 export async function clearSqliteLocalSettings(): Promise<void> {
   await chrome.storage.local.remove([
     ENABLED_DOMAINS_KEY,
     RETENTION_POLICY_KEY,
+    DEDUP_POLICY_KEY,
     PINNED_SCHEMA_KEY,
     PINNED_SCHEMA_KEY_LEGACY,
     DB_STORAGE_KEY,

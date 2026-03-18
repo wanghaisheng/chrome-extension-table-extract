@@ -47,6 +47,14 @@
 - selected validation package
 - commands that ran
 - pass or fail status
+- trophy evidence (at least 1 trophy, or explicit exemption)
+  - trophy test: <test type + test name/path>
+  - command: <command line>
+  - evidence: <artifact path, output summary, or link>
+  - exemption (if needed): <why not applicable> + <replacement evidence>
+- acceptance criteria mapping (2–3 core AC seeds → evidence)
+  - AC: <AC seed text or id> → evidence: <test/assertion/screenshot/log>
+  - AC: <AC seed text or id> → evidence: <test/assertion/screenshot/log>
 - residual risk
 - ADR or doc follow-up required
 - Pilot Gate D (WAL updated):

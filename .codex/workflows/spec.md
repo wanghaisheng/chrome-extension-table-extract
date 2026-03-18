@@ -36,10 +36,22 @@ Compression rule:
    - `.codex/core/closeout-loop.md`
    - `.codex/core/adr-rules.md`
    - `.codex/core/openspec-sync.md`
-6. Prefer new change records under `openspec/changes/{change-name}/` when the routed work needs one.
-7. If the task already has a coherent legacy folder under `_bmad-output/changes/{change-name}/`, keep that record accurate rather than splitting the truth source mid-task.
-8. Use `.codex/core/milestone-design.md` as the shared layer to define and manage milestone-level execution slices instead of leaving the spec as one large planning block.
-9. Keep milestone validation, ADR, and closeout expectations explicit in the change record or milestone notes.
+6. Treat one OpenSpec change packet as the default pilot unit:
+   - `.codex/core/pilot-promotion.md` (Gate A–D + failure loop)
+7. For non-trivial work packaged as a change packet, ensure the packet is machine-checkable:
+   - run `npm run governance:readiness` when change-record templates, readiness packets, or task-packaging contracts are touched
+8. Stage-gate rule (design-first):
+   - before coding, ensure the design includes Gate 1 seed (2–3 core acceptance criteria + a trophy candidate or explicit exemption)
+   - if verification reveals spec ambiguity, stop coding and return to spec/design rather than expanding implementation
+9. Failure handling rule (fail-closed, pilot-first):
+   - if a gate or guardrail fails, stop expansion (do not widen scope)
+   - debug and adjust the method
+   - re-run the selected validation package
+   - update the change packet and WAL entry before continuing
+10. Prefer new change records under `openspec/changes/{change-name}/` when the routed work needs one.
+11. If the task already has a coherent legacy folder under `_bmad-output/changes/{change-name}/`, keep that record accurate rather than splitting the truth source mid-task.
+12. Use `.codex/core/milestone-design.md` as the shared layer to define and manage milestone-level execution slices instead of leaving the spec as one large planning block.
+13. Keep milestone validation, ADR, and closeout expectations explicit in the change record or milestone notes.
 
 ## Hard Rule
 

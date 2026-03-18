@@ -8,10 +8,12 @@ import {
   applyRetentionKeepLastPerDomain,
   clearAllData,
   deleteDomainData,
+  exportDbBytes,
   getExtractionTable,
   listExtractions,
   listDomainSchemaVersionsForPattern,
   listRecentExtractions,
+  restoreDbBytes,
 } from '../utils/sqlite/wa';
 import {
   clearSqliteLocalSettings,
@@ -58,15 +60,30 @@ const History: FunctionComponent<Props> = ({ onBack }) => {
   const [confirmDeleteDomain, setConfirmDeleteDomain] = useState<string | null>(null);
   const [confirmClearAll, setConfirmClearAll] = useState(false);
   const confirmTimers = useRef<{ deleteDomain?: number; clearAll?: number }>({});
+  const restoreInputRef = useRef<HTMLInputElement>(null);
+  const [bulkDownloadFormat, setBulkDownloadFormat] = useState<'json' | 'tsv' | 'csv'>('json');
+  const [historyTab, setHistoryTab] = useState<'results' | 'details' | 'data'>('results');
 
   useEffect(() => {
-    Promise.all([listRecentExtractions(25), listEnabledDomains(), getRetentionPolicy()])
-      .then(([extractions, domains, policy]) => {
+    (async () => {
+      try {
+        const [extractions, domains, policy] = await Promise.all([
+          listRecentExtractions(25),
+          listEnabledDomains(),
+          getRetentionPolicy(),
+        ]);
         setItems(extractions);
         setEnabledDomains(domains);
         setRetention(policy);
-      })
-      .finally(() => setLoading(false));
+      } catch (e: any) {
+        console.warn('Failed to load history state:', e);
+        setItems([]);
+        setEnabledDomains([]);
+        setStatusMsg('Local history storage is temporarily unavailable. Please try again later.');
+      } finally {
+        setLoading(false);
+      }
+    })().catch((e) => console.warn('History init failed:', e));
   }, []);
 
   useEffect(() => {
@@ -107,6 +124,10 @@ const History: FunctionComponent<Props> = ({ onBack }) => {
     getExtractionTable(selectedId, 20).then(setTable);
   }, [selectedId]);
 
+  useEffect(() => {
+    if (selectedId != null) setHistoryTab('details');
+  }, [selectedId]);
+
   const selected = useMemo(() => items.find((i) => i.id === selectedId) ?? null, [items, selectedId]);
   const domainsInDb = useMemo(() => Array.from(new Set(items.map((i) => i.domain))).sort(), [items]);
   const patternsForDomain = useMemo(() => {
@@ -129,10 +150,21 @@ const History: FunctionComponent<Props> = ({ onBack }) => {
   }, [filterDomain, patternsForDomain]);
 
   const refresh = async () => {
-    const [extractions, domains, policy] = await Promise.all([listRecentExtractions(25), listEnabledDomains(), getRetentionPolicy()]);
-    setItems(extractions);
-    setEnabledDomains(domains);
-    setRetention(policy);
+    try {
+      const [extractions, domains, policy] = await Promise.all([
+        listRecentExtractions(25),
+        listEnabledDomains(),
+        getRetentionPolicy(),
+      ]);
+      setItems(extractions);
+      setEnabledDomains(domains);
+      setRetention(policy);
+    } catch (e: any) {
+      console.warn('Failed to refresh history state:', e);
+      setItems([]);
+      setEnabledDomains([]);
+      setStatusMsg('Local history storage is temporarily unavailable. Please try again later.');
+    }
   };
 
   const applyFilters = async () => {
@@ -157,6 +189,11 @@ const History: FunctionComponent<Props> = ({ onBack }) => {
       );
       setItems(extractions);
       setSelectedId(null);
+    } catch (e: any) {
+      console.warn('Failed to apply history filters:', e);
+      setItems([]);
+      setSelectedId(null);
+      setStatusMsg('Local history storage is temporarily unavailable. Please try again later.');
     } finally {
       setWorking(false);
     }
@@ -371,6 +408,63 @@ const History: FunctionComponent<Props> = ({ onBack }) => {
     }
   };
 
+  const downloadDbBackup = async () => {
+    setWorking(true);
+    try {
+      setStatusMsg('');
+      const bytes = await exportDbBytes();
+      if (!bytes || bytes.byteLength === 0) {
+        setStatusMsg('No local database yet.');
+        return;
+      }
+
+      const blob = new Blob([bytes], { type: 'application/octet-stream' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `table-extract-backup-${new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-')}.sqlite`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+      setStatusMsg('Downloaded DB backup.');
+    } catch (e: any) {
+      console.warn('Failed to download DB backup:', e);
+      setStatusMsg('DB backup failed. Please try again later.');
+    } finally {
+      setWorking(false);
+    }
+  };
+
+  const startRestoreDbBackup = () => {
+    restoreInputRef.current?.click();
+  };
+
+  const onRestoreDbBackupSelected = async (e: any) => {
+    const file = e?.currentTarget?.files?.[0] as File | undefined;
+    try {
+      if (e?.currentTarget) e.currentTarget.value = '';
+    } catch {
+      // ignore
+    }
+    if (!file) return;
+
+    setWorking(true);
+    try {
+      setStatusMsg(`Restoring from ${file.name}…`);
+      const buf = await file.arrayBuffer();
+      await restoreDbBytes(new Uint8Array(buf));
+      setSelectedId(null);
+      await refresh();
+      setStatusMsg('Restore complete.');
+    } catch (err: any) {
+      console.warn('Failed to restore DB backup:', err);
+      setStatusMsg('Restore failed. Please check the backup file and try again.');
+    } finally {
+      setWorking(false);
+    }
+  };
+
   const toggleDomain = async (domain: string, enabled: boolean) => {
     setWorking(true);
     try {
@@ -466,179 +560,217 @@ const History: FunctionComponent<Props> = ({ onBack }) => {
 
   return (
     <div className="results">
-      <div className="table-actions">
+      <div className="table-actions" style={{ justifyContent: 'space-between', flexWrap: 'wrap' }}>
         <Button variant="secondary" onClick={onBack}>Back</Button>
+        <div className="tabs" role="tablist" aria-label="History sections" style={{ marginLeft: 'auto' }}>
+          <Button
+            data-testid="history-tab-results"
+            variant="text"
+            size="small"
+            className={historyTab === 'results' ? 'tab tab-active' : 'tab'}
+            aria-current={historyTab === 'results' ? 'page' : undefined}
+            disabled={isWorking}
+            onClick={() => setHistoryTab('results')}
+          >
+            Results
+          </Button>
+          <Button
+            data-testid="history-tab-details"
+            variant="text"
+            size="small"
+            className={historyTab === 'details' ? 'tab tab-active' : 'tab'}
+            aria-current={historyTab === 'details' ? 'page' : undefined}
+            disabled={isWorking}
+            onClick={() => setHistoryTab('details')}
+          >
+            Details
+          </Button>
+          <Button
+            data-testid="history-tab-data"
+            variant="text"
+            size="small"
+            className={historyTab === 'data' ? 'tab tab-active' : 'tab'}
+            aria-current={historyTab === 'data' ? 'page' : undefined}
+            disabled={isWorking}
+            onClick={() => setHistoryTab('data')}
+          >
+            Data
+          </Button>
+        </div>
       </div>
 
       {statusMsg && <div className="pill">{statusMsg}</div>}
 
-      <div className="table-preview" data-testid="section-filters">
-        <div className="table-header">
-          <caption className="title">Filters</caption>
-        </div>
-        <div className="table-body">
-          <div className="table-actions">
-            <div className="pill">Domain</div>
-            <input
-              data-testid="filter-domain"
-              style={{ width: '12rem' }}
-              value={filterDomain}
-              disabled={isWorking}
-              onInput={(e: any) => setFilterDomain(String(e.currentTarget?.value ?? ''))}
-              placeholder="example.com"
-            />
-          </div>
-          <div className="table-actions">
-            <div className="pill">URL contains</div>
-            <input
-              data-testid="filter-url"
-              style={{ width: '12rem' }}
-              value={filterUrl}
-              disabled={isWorking}
-              onInput={(e: any) => setFilterUrl(String(e.currentTarget?.value ?? ''))}
-              placeholder="/path"
-            />
-          </div>
-          <div className="table-actions">
-            <div className="pill">After</div>
-            <input
-              data-testid="filter-after"
-              type="date"
-              value={filterAfter}
-              disabled={isWorking}
-              onInput={(e: any) => setFilterAfter(String(e.currentTarget?.value ?? ''))}
-            />
-            <div className="pill">Before</div>
-            <input
-              data-testid="filter-before"
-              type="date"
-              value={filterBefore}
-              disabled={isWorking}
-              onInput={(e: any) => setFilterBefore(String(e.currentTarget?.value ?? ''))}
-            />
-          </div>
-          <div className="table-actions">
-            <Button
-              data-testid="filters-advanced-toggle"
-              variant="secondary"
-              disabled={isWorking}
-              onClick={() => setShowAdvancedFilters((v) => !v)}
-            >
-              {showAdvancedFilters ? 'Hide advanced' : 'Advanced…'}
-            </Button>
-          </div>
-          {showAdvancedFilters && (
-            <div className="table-actions">
-              <div className="pill">Schema scope</div>
-              <select
-                data-testid="filter-pattern"
-                style={{ width: '10rem' }}
-                value={filterPattern}
-                disabled={isWorking || !filterDomain.trim()}
-                onInput={(e: any) => setFilterPattern(String(e.currentTarget?.value ?? '/'))}
-              >
-                {patternsForDomain.map((p) => (
-                  <option value={p} key={p}>
-                    {p}
-                  </option>
-                ))}
-              </select>
-              <select
-                data-testid="filter-schema-version"
-                style={{ width: '12rem' }}
-                value={filterSchemaVersion}
-                disabled={isWorking || !filterDomain.trim()}
-                onInput={(e: any) => setFilterSchemaVersion(String(e.currentTarget?.value ?? ''))}
-              >
-                <option value="">(any)</option>
-                {domainSchemaVersions.map((v) => (
-                  <option value={String(v)} key={v}>
-                    {pinnedSchemaVersion === v ? `v${v} (pinned)` : `v${v}`}
-                  </option>
-                ))}
-              </select>
-              <Button
-                variant="secondary"
-                disabled={isWorking || !filterDomain.trim() || domainSchemaVersions.length === 0}
-                onClick={() => {
-                  const v = filterSchemaVersion.trim() ? Number(filterSchemaVersion) : (domainSchemaVersions[0] ?? null);
-                  if (v && Number.isFinite(v)) pinSchema(v);
-                }}
-              >
-                Pin active schema
-              </Button>
-              <Button variant="secondary" disabled={isWorking || !filterDomain.trim()} onClick={() => pinSchema(null)}>
-                Clear pin
-              </Button>
+      {historyTab === 'results' && (
+        <>
+          <div className="table-preview" data-testid="section-filters">
+            <div className="table-header">
+              <caption className="title">Filters</caption>
             </div>
-          )}
-          <div className="table-actions">
-            <Button data-testid="filters-apply" variant="primary" disabled={isWorking} onClick={applyFilters}>Apply filters</Button>
-            <Button data-testid="filters-reset" variant="secondary" disabled={isWorking} onClick={resetFilters}>Reset</Button>
-          </div>
-        </div>
-      </div>
-
-      <div className="table-preview" data-testid="section-results">
-        <div className="table-header">
-          <caption className="title">Results</caption>
-          <div className="table-actions" style={{ marginTop: 0 }}>
-            <div className="pill" data-testid="results-count">{`${items.length} shown`}</div>
-            <Button
-              data-testid="bulk-download-json"
-              variant="secondary"
-              disabled={isWorking || items.length === 0}
-              onClick={bulkDownloadShownAsJson}
-            >
-              Download JSON (all shown)
-            </Button>
-            <Button
-              data-testid="bulk-download-tsv"
-              variant="secondary"
-              disabled={isWorking || items.length === 0}
-              onClick={() => bulkDownloadShownAsMerged('tsv')}
-            >
-              Download TSV (merged)
-            </Button>
-            <Button
-              data-testid="bulk-download-csv"
-              variant="secondary"
-              disabled={isWorking || items.length === 0}
-              onClick={() => bulkDownloadShownAsMerged('csv')}
-            >
-              Download CSV (merged)
-            </Button>
-          </div>
-        </div>
-        <div className="table-body">
-          {items.length === 0 ? (
-            <div className="results">No saved extractions yet.</div>
-          ) : (
-            items.map((i) => (
-              <div className="table-preview" key={i.id} data-testid="result-row">
-                <div className="table-header">
-                  <caption className="title">{i.pageTitle ?? i.domain}</caption>
-                  <div className="pill">{`${i.rowCount} rows`}</div>
-                </div>
-                <div className="table-body">
-                  <div className="pill" style={{ whiteSpace: 'normal' }}>{i.url}</div>
-                  <div className="table-actions" style={{ justifyContent: 'space-between' }}>
-                    <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
-                      <div className="pill">{formatTs(i.extractedAt)}</div>
-                      <div className="pill">{String(i.urlPattern ?? '/')}</div>
-                      <div className="pill">{`schema v${i.schemaVersion}`}</div>
-                    </div>
-                    <Button data-testid="open-result" variant="primary" disabled={isWorking} onClick={() => setSelectedId(i.id)}>
-                      Open
-                    </Button>
-                  </div>
-                </div>
+            <div className="table-body">
+              <div className="table-actions">
+                <div className="pill">Domain</div>
+                <input
+                  data-testid="filter-domain"
+                  style={{ width: '12rem' }}
+                  value={filterDomain}
+                  disabled={isWorking}
+                  onInput={(e: any) => setFilterDomain(String(e.currentTarget?.value ?? ''))}
+                  placeholder="example.com"
+                />
               </div>
-            ))
-          )}
-        </div>
-      </div>
+              <div className="table-actions">
+                <div className="pill">URL contains</div>
+                <input
+                  data-testid="filter-url"
+                  style={{ width: '12rem' }}
+                  value={filterUrl}
+                  disabled={isWorking}
+                  onInput={(e: any) => setFilterUrl(String(e.currentTarget?.value ?? ''))}
+                  placeholder="/path"
+                />
+              </div>
+              <div className="table-actions history-filter-dates">
+                <div className="pill">After</div>
+                <input
+                  data-testid="filter-after"
+                  type="date"
+                  value={filterAfter}
+                  disabled={isWorking}
+                  onInput={(e: any) => setFilterAfter(String(e.currentTarget?.value ?? ''))}
+                />
+                <div className="pill">Before</div>
+                <input
+                  data-testid="filter-before"
+                  type="date"
+                  value={filterBefore}
+                  disabled={isWorking}
+                  onInput={(e: any) => setFilterBefore(String(e.currentTarget?.value ?? ''))}
+                />
+              </div>
+              <div className="table-actions">
+                <Button
+                  data-testid="filters-advanced-toggle"
+                  variant="secondary"
+                  disabled={isWorking}
+                  onClick={() => setShowAdvancedFilters((v) => !v)}
+                >
+                  {showAdvancedFilters ? 'Hide advanced' : 'Advanced…'}
+                </Button>
+              </div>
+              {showAdvancedFilters && (
+                <div className="table-actions">
+                  <div className="pill">Schema scope</div>
+                  <select
+                    data-testid="filter-pattern"
+                    style={{ width: '10rem' }}
+                    value={filterPattern}
+                    disabled={isWorking || !filterDomain.trim()}
+                    onInput={(e: any) => setFilterPattern(String(e.currentTarget?.value ?? '/'))}
+                  >
+                    {patternsForDomain.map((p) => (
+                      <option value={p} key={p}>
+                        {p}
+                      </option>
+                    ))}
+                  </select>
+                  <select
+                    data-testid="filter-schema-version"
+                    style={{ width: '12rem' }}
+                    value={filterSchemaVersion}
+                    disabled={isWorking || !filterDomain.trim()}
+                    onInput={(e: any) => setFilterSchemaVersion(String(e.currentTarget?.value ?? ''))}
+                  >
+                    <option value="">(any)</option>
+                    {domainSchemaVersions.map((v) => (
+                      <option value={String(v)} key={v}>
+                        {pinnedSchemaVersion === v ? `v${v} (pinned)` : `v${v}`}
+                      </option>
+                    ))}
+                  </select>
+                  <Button
+                    variant="secondary"
+                    disabled={isWorking || !filterDomain.trim() || domainSchemaVersions.length === 0}
+                    onClick={() => {
+                      const v = filterSchemaVersion.trim() ? Number(filterSchemaVersion) : (domainSchemaVersions[0] ?? null);
+                      if (v && Number.isFinite(v)) pinSchema(v);
+                    }}
+                  >
+                    Pin active schema
+                  </Button>
+                  <Button variant="secondary" disabled={isWorking || !filterDomain.trim()} onClick={() => pinSchema(null)}>
+                    Clear pin
+                  </Button>
+                </div>
+              )}
+              <div className="table-actions">
+                <Button data-testid="filters-apply" variant="primary" disabled={isWorking} onClick={applyFilters}>Apply filters</Button>
+                <Button data-testid="filters-reset" variant="secondary" disabled={isWorking} onClick={resetFilters}>Reset</Button>
+              </div>
+            </div>
+          </div>
 
+          <div className="table-preview" data-testid="section-results">
+            <div className="table-header">
+              <caption className="title">Results</caption>
+              <div className="table-actions history-results-downloads" style={{ marginTop: 0 }}>
+                <div className="pill" data-testid="results-count">{`${items.length} shown`}</div>
+                <select
+                  data-testid="bulk-download-format"
+                  value={bulkDownloadFormat}
+                  disabled={isWorking || items.length === 0}
+                  onInput={(e: any) => setBulkDownloadFormat((e.currentTarget?.value ?? 'json') as any)}
+                  style={{ width: '11rem' }}
+                >
+                  <option value="json">JSON (all shown)</option>
+                  <option value="tsv">TSV (merged)</option>
+                  <option value="csv">CSV (merged)</option>
+                </select>
+                <Button
+                  data-testid="bulk-download-go"
+                  variant="secondary"
+                  disabled={isWorking || items.length === 0}
+                  onClick={() => {
+                    if (bulkDownloadFormat === 'json') return bulkDownloadShownAsJson();
+                    return bulkDownloadShownAsMerged(bulkDownloadFormat);
+                  }}
+                >
+                  Download
+                </Button>
+              </div>
+            </div>
+            <div className="table-body">
+              {items.length === 0 ? (
+                <div className="results">No saved extractions yet.</div>
+              ) : (
+                items.map((i) => (
+                  <div className="table-preview" key={i.id} data-testid="result-row">
+                    <div className="table-header">
+                      <caption className="title">{i.pageTitle ?? i.domain}</caption>
+                      <div className="pill">{`${i.rowCount} rows`}</div>
+                    </div>
+                    <div className="table-body">
+                      <div className="pill" style={{ whiteSpace: 'normal' }}>{i.url}</div>
+                      <div className="table-actions" style={{ justifyContent: 'space-between' }}>
+                        <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+                          <div className="pill">{formatTs(i.extractedAt)}</div>
+                          <div className="pill">{String(i.urlPattern ?? '/')}</div>
+                          <div className="pill">{`schema v${i.schemaVersion}`}</div>
+                        </div>
+                        <Button data-testid="open-result" variant="primary" disabled={isWorking} onClick={() => setSelectedId(i.id)}>
+                          Open
+                        </Button>
+                      </div>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+        </>
+      )}
+
+      {historyTab === 'details' && (
       <div className="table-preview" data-testid="section-details">
         <div className="table-header">
           <caption className="title">Details</caption>
@@ -682,13 +814,34 @@ const History: FunctionComponent<Props> = ({ onBack }) => {
           )}
         </div>
       </div>
+      )}
 
+      {historyTab === 'data' && (
       <div className="table-preview" data-testid="section-data-management">
         <div className="table-header">
           <caption className="title">Data management</caption>
           <div className="pill">{`${domainsInDb.length} domains`}</div>
         </div>
         <div className="table-body">
+          <div className="table-actions" style={{ justifyContent: 'space-between', flexWrap: 'wrap' }}>
+            <div className="pill">Backup</div>
+            <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+              <Button data-testid="db-backup-download" variant="secondary" disabled={isWorking} onClick={downloadDbBackup}>
+                Download backup
+              </Button>
+              <input
+                ref={restoreInputRef}
+                data-testid="db-backup-restore-input"
+                type="file"
+                accept=".sqlite,.db,application/octet-stream"
+                style={{ display: 'none' }}
+                onChange={onRestoreDbBackupSelected}
+              />
+              <Button data-testid="db-backup-restore" variant="secondary" disabled={isWorking} onClick={startRestoreDbBackup}>
+                Restore from backup
+              </Button>
+            </div>
+          </div>
           <div className="table-actions">
             <div className="pill">Retention</div>
             <Button
@@ -799,6 +952,7 @@ const History: FunctionComponent<Props> = ({ onBack }) => {
           )}
         </div>
       </div>
+      )}
     </div>
   );
 };

@@ -438,4 +438,11 @@ AGENTS.md 为 AI Agent 提供了完整的项目上下文和工作指南，确保
 3. **高效协作**: 与其他 Agent 有效协作
 4. **质量保证**: 通过 Ralph Loop 自我迭代
 
+
+现在要“增加新的 agent”，最小可行的标准做法（不等你们把 discovery 系统实现完）
+把 agent/skill 资源放进 ref/ 的一个明确目录（按你们既有分类：engineering / product / marketing / uiux…）
+在 .codex/AGENTS.md 增加一条“可用 agent 注册表”式的条目（名字、用途、输入输出、适用阶段、典型任务、注意事项）
+在 .codex/workflows/aliases.md 增加一个轻量别名（可选）
+比如 ux / qa / reviewer / research 这种“调用意图”，映射到对应参考文档或 agent 说明页（即使没有自动扫描，也能让使用者快速定位）、
+
 **记住：Agent 的成功 = 遵循约束 + 理解上下文 + 高效协作**

@@ -72,3 +72,26 @@ Write/update a WAL entry when:
 - validation is run (record commands and pass/fail)
 - the change is archived (final checkpoint)
 
+## Troubleshooting (2-minute WAL lookup)
+
+When something breaks (flake, crash, regression, confusing behavior), use WAL to recover the last known-good decision/action chain without replaying full chat logs.
+
+Lookup order:
+
+1. **By change**: open the most relevant entry under `entries/YYYY/YYYY-MM-DD_<change-id>.json`.
+2. **By topic**: check `index/by-topic.json` for matches (when maintained), then open the referenced entries.
+3. **By file**: check `index/by-file.json` (when maintained) to find entries that previously touched the same surface.
+
+Read these fields first:
+
+- **`intent`**: confirm you are solving the same problem (avoid “fixing the wrong thing”).
+- **`decisions[]`**: reuse the rationale/tradeoffs and watch for previously rejected options.
+- **`actions.commandsRun` / `actions.testsRun`**: run the same shortest proof commands first.
+- **`evidence.validationStatus` + notes**: see what was actually proven and what was left risky.
+- **`links.changePaths`**: jump to the exact OpenSpec packet and closeout evidence.
+
+If the investigation changes the method (new root cause, new mitigation, new validation):
+
+- update the active change packet first (Gate A–C), then update the WAL entry (Gate D)
+- after checkpoint/archival, prefer a **new** entry for follow-on incidents instead of growing the old one
+

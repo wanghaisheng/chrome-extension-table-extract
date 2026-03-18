@@ -21,12 +21,12 @@
 - [x] M2.2 scope active schema + version increment to (domain + url_pattern)
 - [x] M2.3 update list/query APIs to include `url_pattern`
 
-## Closeout
+## Closeout Rule
 
-- commands ran:
+- commands that ran:
   - `npm run test:unit`
   - `npm run test:pw`
-- pass/fail:
+- pass or fail status:
   - pass
 - residual risk:
   - `url_pattern` bucketing is heuristic (path prefix); future work may add per-domain mapping rules

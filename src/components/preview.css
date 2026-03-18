@@ -99,3 +99,31 @@ table {
   gap: 0.75rem;
   margin-top: 0.5rem;
 }
+
+/* History-specific responsive tweaks for small MV3 popup widths. */
+.history-filter-dates {
+  flex-wrap: wrap;
+  justify-content: flex-start;
+  align-items: center;
+}
+
+.history-filter-dates input[type="date"] {
+  min-width: 9.5rem;
+  max-width: 100%;
+}
+
+.history-results-downloads {
+  flex-wrap: wrap;
+  justify-content: flex-start;
+  align-items: center;
+}
+
+.history-results-downloads select {
+  max-width: 100%;
+}
+
+@media (max-width: 320px) {
+  .history-filter-dates input[type="date"] {
+    min-width: 10.5rem;
+  }
+}

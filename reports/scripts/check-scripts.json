@@ -1,0 +1,26 @@
+{
+  "ok": true,
+  "checked_at": "2026-03-18T03:33:29.262Z",
+  "checks": [
+    {
+      "id": "scripts.mjs_found",
+      "ok": true,
+      "details": "found 3 .mjs files."
+    },
+    {
+      "id": "scripts.output_dir",
+      "ok": true,
+      "details": "scripts writing files appear to use reports/."
+    }
+  ],
+  "warnings": [
+    {
+      "id": "scripts.non_interactive",
+      "message": "interactive patterns detected in 1 script(s). Scripts should be non-interactive.",
+      "files": [
+        "scripts/check-scripts.mjs"
+      ]
+    }
+  ],
+  "errors": []
+}

@@ -50,7 +50,7 @@
   - `npm run test:unit`
   - `npm run test:pw`
 - pass or fail status:
-  - (fill on closeout)
+  - pass
 - residual risk:
   - popup rendering differences across OS scaling; mitigate with E2E and manual sanity
 

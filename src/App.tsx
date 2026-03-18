@@ -8,7 +8,7 @@ import Preview from './components/preview';
 import LoadingSkeleton from './components/loading-skeleton';
 import { ExceptionMessage } from "./types";
 import History from './components/history';
-import { getRetentionPolicy, isDomainEnabled } from './utils/sqlite/storage';
+import { getDedupPolicy, getRetentionPolicy, isDomainEnabled, setDedupPolicy, setDomainEnabled } from './utils/sqlite/storage';
 import {
   applyRetentionKeepLastPerDomain,
   clearAllData,
@@ -45,6 +45,9 @@ const App: FunctionalComponent = () => {
       applyRetentionKeepLastPerDomain,
       clearAllData,
       storeExtraction,
+      getDedupPolicy,
+      setDedupPolicy,
+      setDomainEnabled,
     };
 
     chrome.runtime.sendMessage({ action: 'rows-x:scrap' }, (response) => {

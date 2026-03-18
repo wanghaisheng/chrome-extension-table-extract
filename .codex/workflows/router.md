@@ -50,6 +50,17 @@ Route to `bmm.md` when any of these are true:
 
 BMM still uses the same internal harness, but adds change-record discipline and milestone planning.
 
+## Batch Or Promotion Requests (pilot-first)
+
+When the request implies bulk rollout, promotion, or repeated edits across many files/modules:
+
+- treat it as `BMM` even if each individual edit is small
+- apply `.codex/core/pilot-promotion.md`:
+  - start with a small pilot slice
+  - validate and record evidence
+  - only then promote to larger batches
+- use WBS Level 3 milestones to represent each batch or promotion step, not one branch-sized rewrite
+
 ## Common Landing Patterns
 
 - `spec -> BMM`

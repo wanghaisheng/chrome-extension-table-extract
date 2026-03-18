@@ -36,6 +36,11 @@ Escalation rule:
    - `.codex/core/closeout-loop.md`
 6. Use `.codex/core/milestone-design.md` as the shared layer to define and manage one coherent milestone before implementation expands.
 7. If the task outgrows Quick or no longer fits one managed Level 3 milestone, switch to `.codex/workflows/bmm.md`.
+8. Failure handling rule (pilot-style, fail-closed):
+   - when a guardrail or validation fails, stop expansion (do not widen scope)
+   - inspect the first failure output, debug the actual cause, then re-run the affected validation
+   - if verification reveals requirements ambiguity, route back through `spec.md` (update acceptance criteria + trophy seed) before continuing
+   - record validation evidence + residual risk at closeout, and update WAL when the change is non-trivial
 
 ## Hard Rule
 

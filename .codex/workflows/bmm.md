@@ -57,11 +57,12 @@ Prefer a change record under:
 
 Use `kebab-case` for `{change-name}`.
 
-Recommended minimum files for non-trivial work:
+Default required files for non-trivial work:
 
 - `README.md`
 - `proposal.md`
 - `tasks.md`
+- `specs/<area>/spec.md` (durable spec contract)
 
 Add `design.md` when the task changes architecture, shared contracts, or non-obvious technical behavior.
 

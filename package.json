@@ -19,6 +19,11 @@
     "test:pw": "tsc && vite build --mode=e2e && playwright test",
     "preview": "vite preview",
     "lint": "eslint src -c ./.eslintrc.cjs --ext .jsx,.js,.ts,.tsx",
+    "check:syntax": "tsc --noEmit",
+    "governance:readiness": "node scripts/governance/readiness.mjs",
+    "check:scripts": "node scripts/check-scripts.mjs",
+    "docs:check": "node scripts/docs/check.mjs",
+    "docs:check:strict": "node scripts/docs/check.mjs --strict",
     "check-types": "tsc --noEmit",
     "prepare": "husky",
     "clean": "rm -rf dist"

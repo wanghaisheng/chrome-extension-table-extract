@@ -43,6 +43,14 @@ Before coding, explicitly validate the design by answering:
 - Determinism and scope:
   - what is the exact unit of change? (should align with Gate A)
   - what must remain unchanged?
+- Stage Gate 1 seed (acceptance + trophy):
+  - 2–3 core acceptance criteria seeds (testable statements):
+    - <AC seed>
+    - <AC seed>
+  - Trophy candidate (or exemption):
+    - proposed trophy test: <test type + target file or scenario>
+    - command to run: <command>
+    - if exempt: <why trophy is not applicable> + <what evidence replaces it>
 - Verification plan:
   - which tests/commands will be used to prove correctness?
   - what would falsify this design?

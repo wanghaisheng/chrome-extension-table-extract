@@ -2,7 +2,7 @@
 
 ## Status
 
-- planned
+- validated
 
 ## Harness Alignment
 

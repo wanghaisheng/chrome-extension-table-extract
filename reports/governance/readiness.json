@@ -1,0 +1,33 @@
+{
+  "ok": true,
+  "checked_at": "2026-03-18T04:23:12.109Z",
+  "checks": [
+    {
+      "id": "template.design.gate1_seed",
+      "ok": true,
+      "details": "design template contains Gate1 seed (AC + trophy + fallback)."
+    },
+    {
+      "id": "template.tasks.closeout_contract",
+      "ok": true,
+      "details": "tasks template closeout includes trophy + AC mapping + WAL."
+    },
+    {
+      "id": "active.specs_present",
+      "ok": true,
+      "details": "all active packets contain specs/<area>/spec.md."
+    },
+    {
+      "id": "active.specs_linked",
+      "ok": true,
+      "details": "all active packets link at least one spec in README."
+    },
+    {
+      "id": "archive.closeout_minimum",
+      "ok": true,
+      "details": "all archived packets contain minimum closeout fields."
+    }
+  ],
+  "warnings": [],
+  "errors": []
+}

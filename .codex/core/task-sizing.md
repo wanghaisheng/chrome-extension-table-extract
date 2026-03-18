@@ -54,6 +54,7 @@ Move to `BMM` when any of these are true:
 - hidden dependency risk remains
 - multiple workers or worktrees would need explicit coordination
 - the deterministic interface is not fixed yet
+- the task is a bulk rollout or promotion request across many targets (pilot-first batching is required)
 
 ## Split Patterns
 
