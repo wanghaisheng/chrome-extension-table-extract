@@ -17,25 +17,16 @@ This roadmap focuses on a **local-first** workflow: extracted data is persisted 
 - History UI: list recent extractions + open detail preview.
 - Domain controls: enable/disable auto-capture; delete all data for a domain.
 - Data lifecycle: optional retention policy (keep last N per domain); clear all local data.
+- Retrieval & export: filter History (domain/url/date + url pattern bucket) and export/copy (TSV/CSV/JSON) without re-scraping.
+- Schema evolution UX: show schema version and allow pinning an “active schema” per (domain + url pattern) bucket (optional).
+- Schema scope: version streams are scoped by (domain + url pattern) buckets (e.g. `/products/*` vs `/users/*`).
 - Automated tests: Playwright E2E (opt-in/auto-capture + controls + clear-all) + unit tests (SQLite core + retention).
 
 ## Next (0.2) – Retrieval & export without leaving the extension
 
 **Goal**: local storage becomes useful for reuse, not just archiving.
 
-- **Search / filter**
-  - filter by domain
-  - filter by URL substring
-  - filter by date range
-- **Export**
-  - export a stored extraction to TSV/CSV/JSON
-  - copy stored extraction to clipboard
-- **Schema evolution UX**
-  - show schema version for each extraction
-  - allow users to pin an “active schema” per domain (optional)
-- **Validation**
-  - unit tests for schema versioning scenarios
-  - Playwright: export correctness for at least one domain
+- (shipped in 0.1.x; see “Now”)
 
 ## Mid-term (0.3) – Performance, reliability, and dedup
 

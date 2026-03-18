@@ -96,7 +96,8 @@ const App: FunctionalComponent = () => {
     <>
       <Header
         onReportClick={toggleReportTab}
-        onHistoryClick={() => setActivePanel((p) => (p === 'history' ? 'extract' : 'history'))}
+        activePanel={activePanel}
+        onSelectPanel={(panel) => setActivePanel(panel)}
       />
       <div className="container">
         {isReportFormOpen ? (

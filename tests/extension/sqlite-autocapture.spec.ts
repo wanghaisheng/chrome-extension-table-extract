@@ -63,10 +63,13 @@ async function listExtractionUrlsFromDebug(extensionPage: any): Promise<string[]
     return Boolean(dbg?.listExtractionUrls);
   }, { timeout: 20_000 });
 
-  const result = await extensionPage.evaluate(async () => {
-    const dbg = (window as any).__tableExtractDebug;
-    return await dbg.listExtractionUrls();
-  });
+  const result = await Promise.race([
+    extensionPage.evaluate(async () => {
+      const dbg = (window as any).__tableExtractDebug;
+      return await dbg.listExtractionUrls();
+    }),
+    new Promise((_, reject) => setTimeout(() => reject(new Error('Timed out calling debug.listExtractionUrls()')), 20_000)),
+  ]);
 
   if (!Array.isArray(result)) throw new Error('Debug API listExtractionUrls returned non-array');
   return result;
@@ -121,13 +124,16 @@ async function waitForRecentExtractionsToContain(extensionPage: any, url: string
 
 async function storeExtractionViaDebug(extensionPage: any, url: string, pageTitle: string, table: string[][]): Promise<void> {
   await extensionPage.waitForFunction(() => Boolean((window as any).__tableExtractDebug?.storeExtraction), { timeout: 20_000 });
-  await extensionPage.evaluate(
-    async ({ url, pageTitle, table }) => {
-      const dbg = (window as any).__tableExtractDebug;
-      await dbg.storeExtraction({ url, pageTitle, table });
-    },
-    { url, pageTitle, table },
-  );
+  await Promise.race([
+    extensionPage.evaluate(
+      async ({ url, pageTitle, table }) => {
+        const dbg = (window as any).__tableExtractDebug;
+        await dbg.storeExtraction({ url, pageTitle, table });
+      },
+      { url, pageTitle, table },
+    ),
+    new Promise((_, reject) => setTimeout(() => reject(new Error('Timed out calling debug.storeExtraction()')), 30_000)),
+  ]);
 }
 
 test('manual opt-in enables domain auto-capture on subsequent URLs', async () => {
@@ -240,7 +246,7 @@ test('manual opt-in enables domain auto-capture on subsequent URLs', async () =>
 
   // Disable auto-capture before writing /users/* to avoid double writes.
   await extPage.getByRole('button', { name: 'History' }).click();
-  await expect(extPage.getByText('Domains')).toBeVisible();
+  await expect(extPage.getByTestId('section-data-management')).toBeVisible();
   await expect(extPage.getByText('example.test', { exact: true })).toBeVisible();
   await extPage.getByRole('button', { name: 'Disable auto-capture' }).click();
   await expect(extPage.getByRole('button', { name: 'Enable auto-capture' })).toBeVisible();
@@ -266,6 +272,10 @@ test('manual opt-in enables domain auto-capture on subsequent URLs', async () =>
 
   // Filters: narrow to products/2 only.
   await extPage.getByPlaceholder('example.com').fill('example.test');
+  const advancedToggle1 = extPage.getByTestId('filters-advanced-toggle');
+  await expect(advancedToggle1).toBeVisible({ timeout: 10_000 });
+  await extPage.evaluate(() => window.scrollTo(0, 0));
+  await advancedToggle1.click({ timeout: 20_000 });
   const patternSelect1 = extPage.getByTestId('filter-pattern');
   await expect(patternSelect1.locator('option', { hasText: '/products' })).toHaveCount(1);
   await patternSelect1.selectOption('/products');
@@ -276,17 +286,22 @@ test('manual opt-in enables domain auto-capture on subsequent URLs', async () =>
   await expect(extPage.getByText(url3)).toHaveCount(0);
 
   // Open the filtered entry (url2) and validate export.
-  const openButtons = extPage.getByRole('button', { name: 'Open' });
+  const openButtons = extPage.getByTestId('open-result');
   await expect(openButtons.first()).toBeVisible();
   await openButtons.first().click();
+  await expect(extPage.getByTestId('section-details')).toBeVisible();
+  await expect(extPage.getByTestId('download-json')).toBeVisible();
 
   // Export: download JSON and validate it includes stored content.
-  const downloadPromise = extPage.waitForEvent('download');
-  await extPage.getByRole('button', { name: 'Download JSON' }).click();
+  const downloadPromise = extPage.waitForEvent('download', { timeout: 20_000 });
+  await extPage.getByTestId('download-json').click();
   const download = await downloadPromise;
-  const filePath = await download.path();
-  expect(filePath).toBeTruthy();
-  const jsonText = readFileSync(filePath as string, 'utf-8');
+  const savedPath = join(tmpdir(), `table-extract-${Date.now()}.json`);
+  await Promise.race([
+    download.saveAs(savedPath),
+    new Promise((_, reject) => setTimeout(() => reject(new Error('Timed out saving download')), 20_000)),
+  ]);
+  const jsonText = readFileSync(savedPath, 'utf-8');
   const parsed = JSON.parse(jsonText);
   expect(parsed.headers).toEqual(['Name', 'Age']);
   expect(JSON.stringify(parsed.rows)).toContain('Charlie');
@@ -304,6 +319,10 @@ test('manual opt-in enables domain auto-capture on subsequent URLs', async () =>
   await extPage.getByPlaceholder('example.com').fill('example.test');
   await extPage.getByPlaceholder('/path').fill('');
   // Pick the /products bucket in the Pattern selector.
+  const advancedToggle2 = extPage.getByTestId('filters-advanced-toggle');
+  await expect(advancedToggle2).toBeVisible({ timeout: 10_000 });
+  await extPage.evaluate(() => window.scrollTo(0, 0));
+  await advancedToggle2.click({ timeout: 20_000 });
   const patternSelect2 = extPage.getByTestId('filter-pattern');
   await expect(patternSelect2.locator('option', { hasText: '/products' })).toHaveCount(1);
   await patternSelect2.selectOption('/products');
@@ -311,7 +330,14 @@ test('manual opt-in enables domain auto-capture on subsequent URLs', async () =>
   await extPage.getByRole('button', { name: 'Apply filters' }).click();
   await expect(extPage.getByText(url2).first()).toBeVisible();
 
-  await context.close();
+  try {
+    await Promise.race([
+      context.close(),
+      new Promise((_, reject) => setTimeout(() => reject(new Error('Timed out closing context')), 10_000)),
+    ]);
+  } catch {
+    // Best-effort: avoid hanging the whole test on shutdown flake.
+  }
 });
 
 test('domain controls: disable auto-capture and delete domain data', async () => {
@@ -387,7 +413,7 @@ test('domain controls: disable auto-capture and delete domain data', async () =>
 
   // Disable auto-capture for the domain in History.
   await extPage.getByRole('button', { name: 'History' }).click();
-  await expect(extPage.getByText('Domains')).toBeVisible();
+  await expect(extPage.getByTestId('section-data-management')).toBeVisible();
   await expect(extPage.getByText(domain, { exact: true })).toBeVisible();
   await extPage.getByRole('button', { name: 'Disable auto-capture' }).click();
   await expect(extPage.getByRole('button', { name: 'Enable auto-capture' })).toBeVisible();
@@ -403,8 +429,8 @@ test('domain controls: disable auto-capture and delete domain data', async () =>
   // Delete domain data.
   await extPage.getByRole('button', { name: 'History' }).click();
   await expect(extPage.getByText(domain, { exact: true })).toBeVisible();
-  extPage.once('dialog', (d) => d.accept());
-  await extPage.getByRole('button', { name: 'Delete data' }).click();
+  await extPage.getByTestId('delete-domain').click();
+  await extPage.getByTestId('delete-domain-confirm').click();
   await expect(extPage.getByText('No saved extractions yet.')).toBeVisible();
 
   // Verify DB is cleared for that domain.
@@ -470,9 +496,9 @@ test('clear all removes all local data', async () => {
 
   // Clear all.
   await extPage.getByRole('button', { name: 'History' }).click();
-  await expect(extPage.getByText('Lifecycle')).toBeVisible();
-  extPage.once('dialog', (d) => d.accept());
-  await extPage.getByRole('button', { name: 'Clear all local data' }).click();
+  await expect(extPage.getByTestId('section-data-management')).toBeVisible();
+  await extPage.getByTestId('clear-all').click();
+  await extPage.getByTestId('clear-all-confirm').click();
   await expect(extPage.getByText('No saved extractions yet.')).toBeVisible();
 
   // DB should now be empty.

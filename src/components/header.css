@@ -8,3 +8,23 @@
   align-items: center;
   gap: 1rem;
 }
+
+.tabs {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.125rem;
+  border-radius: 0.5rem;
+  background: var(--lighter-grey);
+  border: 1px solid var(--light-grey);
+}
+
+.tab {
+  border-radius: 0.4rem;
+  padding: 0.25rem 0.5rem;
+}
+
+.tab-active {
+  background: white;
+  border: 1px solid var(--light-grey);
+}

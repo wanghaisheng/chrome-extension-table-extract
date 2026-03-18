@@ -1,7 +1,7 @@
 import './button.css';
-import { FunctionComponent, ComponentChildren } from 'preact';
+import { FunctionComponent, ComponentChildren, JSX } from 'preact';
 
-interface Props {
+interface Props extends Omit<JSX.HTMLAttributes<HTMLButtonElement>, 'onClick' | 'className' | 'children' | 'size'> {
   onClick?: () => void;
   children: ComponentChildren;
   variant?: 'text' | 'primary' | 'secondary' | 'from';
@@ -19,6 +19,7 @@ const Button: FunctionComponent<Props> = ({
   size = '',
   children,
   disabled = false,
+  ...rest
 }) => {
   return (
     <button
@@ -27,6 +28,7 @@ const Button: FunctionComponent<Props> = ({
       onClick={disabled ? undefined : onClick}
       disabled={disabled}
       aria-disabled={disabled}
+      {...rest}
     >
       {children}
     </button>

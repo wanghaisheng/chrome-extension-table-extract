@@ -1,5 +1,5 @@
 import { FunctionComponent } from 'preact';
-import { useEffect, useMemo, useState } from 'preact/hooks';
+import { useEffect, useMemo, useRef, useState } from 'preact/hooks';
 
 import Button from './button';
 import './preview.css';
@@ -54,6 +54,10 @@ const History: FunctionComponent<Props> = ({ onBack }) => {
   const [filterSchemaVersion, setFilterSchemaVersion] = useState<string>(''); // number string
   const [domainSchemaVersions, setDomainSchemaVersions] = useState<number[]>([]);
   const [pinnedSchemaVersion, setPinnedSchema] = useState<number | null>(null);
+  const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
+  const [confirmDeleteDomain, setConfirmDeleteDomain] = useState<string | null>(null);
+  const [confirmClearAll, setConfirmClearAll] = useState(false);
+  const confirmTimers = useRef<{ deleteDomain?: number; clearAll?: number }>({});
 
   useEffect(() => {
     Promise.all([listRecentExtractions(25), listEnabledDomains(), getRetentionPolicy()])
@@ -223,6 +227,150 @@ const History: FunctionComponent<Props> = ({ onBack }) => {
     }
   };
 
+  const bulkDownloadShownAsJson = async () => {
+    if (items.length === 0) return;
+    setWorking(true);
+    try {
+      setStatusMsg('');
+      const payload: any = {
+        exportedAt: Date.now(),
+        scope: {
+          domain: filterDomain.trim() || null,
+          urlSubstring: filterUrl.trim() || null,
+          extractedAfter: filterAfter || null,
+          extractedBefore: filterBefore || null,
+          urlPattern: filterDomain.trim() ? filterPattern : null,
+          schemaVersion: filterSchemaVersion.trim() || (pinnedSchemaVersion != null ? `pinned:${pinnedSchemaVersion}` : null),
+        },
+        items: [] as any[],
+      };
+
+      for (let i = 0; i < items.length; i++) {
+        const it = items[i]!;
+        setStatusMsg(`Exporting ${i + 1}/${items.length}…`);
+        const table = await getExtractionTable(it.id, undefined);
+        payload.items.push({
+          id: it.id,
+          domain: it.domain,
+          url: it.url,
+          urlPattern: it.urlPattern ?? '/',
+          pageTitle: it.pageTitle ?? null,
+          extractedAt: it.extractedAt,
+          rowCount: it.rowCount,
+          schemaVersion: it.schemaVersion,
+          table,
+        });
+      }
+
+      const content = JSON.stringify(payload, null, 2);
+      const blob = new Blob([content], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      const domain = filterDomain.trim() ? filterDomain.trim().replace(/[^a-zA-Z0-9.-]+/g, '_') : 'all';
+      const pattern = filterDomain.trim() ? String(filterPattern || '/').replace(/[^a-zA-Z0-9/_-]+/g, '_') : 'any';
+      a.download = `table-extract-bulk-${domain}-${pattern}-${Date.now()}.json`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+      setStatusMsg(`Downloaded bulk JSON (${items.length} extractions).`);
+    } finally {
+      setWorking(false);
+    }
+  };
+
+  const bulkDownloadShownAsMerged = async (format: 'tsv' | 'csv') => {
+    if (items.length === 0) return;
+    setWorking(true);
+    try {
+      setStatusMsg('');
+
+      type ItemTable = {
+        meta: {
+          id: number;
+          domain: string;
+          url: string;
+          urlPattern: string;
+          pageTitle: string;
+          extractedAt: number;
+          rowCount: number;
+          schemaVersion: number;
+        };
+        headers: string[];
+        rows: string[][];
+      };
+
+      const tables: ItemTable[] = [];
+      const headerSet = new Set<string>();
+
+      // Base metadata columns for merged export.
+      const metaHeaders = ['url', 'extracted_at', 'domain', 'url_pattern', 'schema_version', 'page_title'];
+
+      for (let i = 0; i < items.length; i++) {
+        const it = items[i]!;
+        setStatusMsg(`Exporting ${i + 1}/${items.length}…`);
+        const table = await getExtractionTable(it.id, undefined);
+        const headers = (table?.[0] ?? []).map((h) => String(h ?? ''));
+        for (const h of headers) headerSet.add(h);
+        tables.push({
+          meta: {
+            id: it.id,
+            domain: it.domain,
+            url: it.url,
+            urlPattern: String(it.urlPattern ?? '/'),
+            pageTitle: String(it.pageTitle ?? ''),
+            extractedAt: it.extractedAt,
+            rowCount: it.rowCount,
+            schemaVersion: it.schemaVersion,
+          },
+          headers,
+          rows: (table ?? []).slice(1).map((r) => (r ?? []).map((c) => String(c ?? ''))),
+        });
+      }
+
+      const mergedHeaders = [...metaHeaders, ...Array.from(headerSet)];
+      const headerIndex = new Map<string, number>();
+      mergedHeaders.forEach((h, idx) => headerIndex.set(h, idx));
+
+      const merged: string[][] = [mergedHeaders];
+      for (const t of tables) {
+        for (const row of t.rows) {
+          const out = new Array<string>(mergedHeaders.length).fill('');
+          out[headerIndex.get('url')!] = t.meta.url;
+          out[headerIndex.get('extracted_at')!] = String(t.meta.extractedAt);
+          out[headerIndex.get('domain')!] = t.meta.domain;
+          out[headerIndex.get('url_pattern')!] = t.meta.urlPattern;
+          out[headerIndex.get('schema_version')!] = String(t.meta.schemaVersion);
+          out[headerIndex.get('page_title')!] = t.meta.pageTitle;
+
+          for (let c = 0; c < Math.max(t.headers.length, row.length); c++) {
+            const h = t.headers[c] ?? `col_${c}`;
+            if (!headerIndex.has(h)) continue;
+            out[headerIndex.get(h)!] = row[c] ?? '';
+          }
+          merged.push(out);
+        }
+      }
+
+      const content = format === 'tsv' ? toTSV(merged) : toCSV(merged);
+      const blob = new Blob([content], { type: 'text/plain' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      const domain = filterDomain.trim() ? filterDomain.trim().replace(/[^a-zA-Z0-9.-]+/g, '_') : 'all';
+      const pattern = filterDomain.trim() ? String(filterPattern || '/').replace(/[^a-zA-Z0-9/_-]+/g, '_') : 'any';
+      a.download = `table-extract-bulk-${domain}-${pattern}-${Date.now()}.${format}`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+      setStatusMsg(`Downloaded bulk ${format.toUpperCase()} (${merged.length - 1} rows).`);
+    } finally {
+      setWorking(false);
+    }
+  };
+
   const toggleDomain = async (domain: string, enabled: boolean) => {
     setWorking(true);
     try {
@@ -234,8 +382,6 @@ const History: FunctionComponent<Props> = ({ onBack }) => {
   };
 
   const deleteDomain = async (domain: string) => {
-    const ok = window.confirm(`Delete all local data for ${domain}? This cannot be undone.`);
-    if (!ok) return;
     setWorking(true);
     try {
       setStatusMsg('');
@@ -277,8 +423,6 @@ const History: FunctionComponent<Props> = ({ onBack }) => {
   };
 
   const clearAll = async () => {
-    const ok = window.confirm('Clear ALL locally stored data? This cannot be undone.');
-    if (!ok) return;
     setWorking(true);
     try {
       setStatusMsg('');
@@ -290,6 +434,30 @@ const History: FunctionComponent<Props> = ({ onBack }) => {
     } finally {
       setWorking(false);
     }
+  };
+
+  const startConfirmDeleteDomain = (domain: string) => {
+    setConfirmDeleteDomain(domain);
+    if (confirmTimers.current.deleteDomain) window.clearTimeout(confirmTimers.current.deleteDomain);
+    confirmTimers.current.deleteDomain = window.setTimeout(() => setConfirmDeleteDomain(null), 10_000);
+  };
+
+  const cancelConfirmDeleteDomain = () => {
+    setConfirmDeleteDomain(null);
+    if (confirmTimers.current.deleteDomain) window.clearTimeout(confirmTimers.current.deleteDomain);
+    confirmTimers.current.deleteDomain = undefined;
+  };
+
+  const startConfirmClearAll = () => {
+    setConfirmClearAll(true);
+    if (confirmTimers.current.clearAll) window.clearTimeout(confirmTimers.current.clearAll);
+    confirmTimers.current.clearAll = window.setTimeout(() => setConfirmClearAll(false), 10_000);
+  };
+
+  const cancelConfirmClearAll = () => {
+    setConfirmClearAll(false);
+    if (confirmTimers.current.clearAll) window.clearTimeout(confirmTimers.current.clearAll);
+    confirmTimers.current.clearAll = undefined;
   };
 
   if (isLoading) {
@@ -304,7 +472,7 @@ const History: FunctionComponent<Props> = ({ onBack }) => {
 
       {statusMsg && <div className="pill">{statusMsg}</div>}
 
-      <div className="table-preview">
+      <div className="table-preview" data-testid="section-filters">
         <div className="table-header">
           <caption className="title">Filters</caption>
         </div>
@@ -312,6 +480,7 @@ const History: FunctionComponent<Props> = ({ onBack }) => {
           <div className="table-actions">
             <div className="pill">Domain</div>
             <input
+              data-testid="filter-domain"
               style={{ width: '12rem' }}
               value={filterDomain}
               disabled={isWorking}
@@ -322,6 +491,7 @@ const History: FunctionComponent<Props> = ({ onBack }) => {
           <div className="table-actions">
             <div className="pill">URL contains</div>
             <input
+              data-testid="filter-url"
               style={{ width: '12rem' }}
               value={filterUrl}
               disabled={isWorking}
@@ -331,94 +501,192 @@ const History: FunctionComponent<Props> = ({ onBack }) => {
           </div>
           <div className="table-actions">
             <div className="pill">After</div>
-            <input type="date" value={filterAfter} disabled={isWorking} onInput={(e: any) => setFilterAfter(String(e.currentTarget?.value ?? ''))} />
+            <input
+              data-testid="filter-after"
+              type="date"
+              value={filterAfter}
+              disabled={isWorking}
+              onInput={(e: any) => setFilterAfter(String(e.currentTarget?.value ?? ''))}
+            />
             <div className="pill">Before</div>
-            <input type="date" value={filterBefore} disabled={isWorking} onInput={(e: any) => setFilterBefore(String(e.currentTarget?.value ?? ''))} />
+            <input
+              data-testid="filter-before"
+              type="date"
+              value={filterBefore}
+              disabled={isWorking}
+              onInput={(e: any) => setFilterBefore(String(e.currentTarget?.value ?? ''))}
+            />
           </div>
           <div className="table-actions">
-            <div className="pill">Schema</div>
-            <select
-              data-testid="filter-pattern"
-              style={{ width: '10rem' }}
-              value={filterPattern}
-              disabled={isWorking || !filterDomain.trim()}
-              onInput={(e: any) => setFilterPattern(String(e.currentTarget?.value ?? '/'))}
-            >
-              {patternsForDomain.map((p) => (
-                <option value={p} key={p}>
-                  {p}
-                </option>
-              ))}
-            </select>
-            <select
-              data-testid="filter-schema-version"
-              style={{ width: '12rem' }}
-              value={filterSchemaVersion}
-              disabled={isWorking || !filterDomain.trim()}
-              onInput={(e: any) => setFilterSchemaVersion(String(e.currentTarget?.value ?? ''))}
-            >
-              <option value="">(any)</option>
-              {domainSchemaVersions.map((v) => (
-                <option value={String(v)} key={v}>
-                  {pinnedSchemaVersion === v ? `v${v} (pinned)` : `v${v}`}
-                </option>
-              ))}
-            </select>
             <Button
+              data-testid="filters-advanced-toggle"
               variant="secondary"
-              disabled={isWorking || !filterDomain.trim() || domainSchemaVersions.length === 0}
-              onClick={() => {
-                const v = filterSchemaVersion.trim() ? Number(filterSchemaVersion) : (domainSchemaVersions[0] ?? null);
-                if (v && Number.isFinite(v)) pinSchema(v);
-              }}
+              disabled={isWorking}
+              onClick={() => setShowAdvancedFilters((v) => !v)}
             >
-              Pin active schema
-            </Button>
-            <Button variant="secondary" disabled={isWorking || !filterDomain.trim()} onClick={() => pinSchema(null)}>
-              Clear pin
+              {showAdvancedFilters ? 'Hide advanced' : 'Advanced…'}
             </Button>
           </div>
+          {showAdvancedFilters && (
+            <div className="table-actions">
+              <div className="pill">Schema scope</div>
+              <select
+                data-testid="filter-pattern"
+                style={{ width: '10rem' }}
+                value={filterPattern}
+                disabled={isWorking || !filterDomain.trim()}
+                onInput={(e: any) => setFilterPattern(String(e.currentTarget?.value ?? '/'))}
+              >
+                {patternsForDomain.map((p) => (
+                  <option value={p} key={p}>
+                    {p}
+                  </option>
+                ))}
+              </select>
+              <select
+                data-testid="filter-schema-version"
+                style={{ width: '12rem' }}
+                value={filterSchemaVersion}
+                disabled={isWorking || !filterDomain.trim()}
+                onInput={(e: any) => setFilterSchemaVersion(String(e.currentTarget?.value ?? ''))}
+              >
+                <option value="">(any)</option>
+                {domainSchemaVersions.map((v) => (
+                  <option value={String(v)} key={v}>
+                    {pinnedSchemaVersion === v ? `v${v} (pinned)` : `v${v}`}
+                  </option>
+                ))}
+              </select>
+              <Button
+                variant="secondary"
+                disabled={isWorking || !filterDomain.trim() || domainSchemaVersions.length === 0}
+                onClick={() => {
+                  const v = filterSchemaVersion.trim() ? Number(filterSchemaVersion) : (domainSchemaVersions[0] ?? null);
+                  if (v && Number.isFinite(v)) pinSchema(v);
+                }}
+              >
+                Pin active schema
+              </Button>
+              <Button variant="secondary" disabled={isWorking || !filterDomain.trim()} onClick={() => pinSchema(null)}>
+                Clear pin
+              </Button>
+            </div>
+          )}
           <div className="table-actions">
-            <Button variant="primary" disabled={isWorking} onClick={applyFilters}>Apply filters</Button>
-            <Button variant="secondary" disabled={isWorking} onClick={resetFilters}>Reset</Button>
+            <Button data-testid="filters-apply" variant="primary" disabled={isWorking} onClick={applyFilters}>Apply filters</Button>
+            <Button data-testid="filters-reset" variant="secondary" disabled={isWorking} onClick={resetFilters}>Reset</Button>
           </div>
         </div>
       </div>
 
-      <div className="table-preview">
+      <div className="table-preview" data-testid="section-results">
         <div className="table-header">
-          <caption className="title">Domains</caption>
-          <div className="pill">{`${domainsInDb.length} total`}</div>
+          <caption className="title">Results</caption>
+          <div className="table-actions" style={{ marginTop: 0 }}>
+            <div className="pill" data-testid="results-count">{`${items.length} shown`}</div>
+            <Button
+              data-testid="bulk-download-json"
+              variant="secondary"
+              disabled={isWorking || items.length === 0}
+              onClick={bulkDownloadShownAsJson}
+            >
+              Download JSON (all shown)
+            </Button>
+            <Button
+              data-testid="bulk-download-tsv"
+              variant="secondary"
+              disabled={isWorking || items.length === 0}
+              onClick={() => bulkDownloadShownAsMerged('tsv')}
+            >
+              Download TSV (merged)
+            </Button>
+            <Button
+              data-testid="bulk-download-csv"
+              variant="secondary"
+              disabled={isWorking || items.length === 0}
+              onClick={() => bulkDownloadShownAsMerged('csv')}
+            >
+              Download CSV (merged)
+            </Button>
+          </div>
         </div>
         <div className="table-body">
-          {domainsInDb.length === 0 ? (
-            <div className="results">No domains yet.</div>
+          {items.length === 0 ? (
+            <div className="results">No saved extractions yet.</div>
           ) : (
-            domainsInDb.map((d) => {
-              const enabled = enabledDomains.includes(d);
-              return (
-                <div className="table-actions" key={d}>
-                  <div className="pill">{d}</div>
-                  <Button
-                    variant={enabled ? 'secondary' : 'primary'}
-                    disabled={isWorking}
-                    onClick={() => toggleDomain(d, !enabled)}
-                  >
-                    {enabled ? 'Disable auto-capture' : 'Enable auto-capture'}
-                  </Button>
-                  <Button variant="secondary" disabled={isWorking} onClick={() => deleteDomain(d)}>
-                    Delete data
-                  </Button>
+            items.map((i) => (
+              <div className="table-preview" key={i.id} data-testid="result-row">
+                <div className="table-header">
+                  <caption className="title">{i.pageTitle ?? i.domain}</caption>
+                  <div className="pill">{`${i.rowCount} rows`}</div>
                 </div>
-              );
-            })
+                <div className="table-body">
+                  <div className="pill" style={{ whiteSpace: 'normal' }}>{i.url}</div>
+                  <div className="table-actions" style={{ justifyContent: 'space-between' }}>
+                    <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+                      <div className="pill">{formatTs(i.extractedAt)}</div>
+                      <div className="pill">{String(i.urlPattern ?? '/')}</div>
+                      <div className="pill">{`schema v${i.schemaVersion}`}</div>
+                    </div>
+                    <Button data-testid="open-result" variant="primary" disabled={isWorking} onClick={() => setSelectedId(i.id)}>
+                      Open
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            ))
           )}
         </div>
       </div>
 
-      <div className="table-preview">
+      <div className="table-preview" data-testid="section-details">
         <div className="table-header">
-          <caption className="title">Lifecycle</caption>
+          <caption className="title">Details</caption>
+          {selected ? <div className="pill">{`${selected.rowCount} rows`}</div> : <div className="pill">none selected</div>}
+        </div>
+        <div className="table-body">
+          {selected ? (
+            <>
+              <div className="pill" data-testid="details-scope" style={{ whiteSpace: 'normal' }}>
+                {selected.domain} · {String(selected.urlPattern ?? '/')} · schema v{selected.schemaVersion}
+              </div>
+              <div className="pill" style={{ whiteSpace: 'normal' }}>{selected.url}</div>
+              <div className="table-actions">
+                <Button data-testid="copy-tsv" variant="primary" disabled={isWorking} onClick={copySelected}>Copy TSV</Button>
+                <Button data-testid="download-tsv" variant="secondary" disabled={isWorking} onClick={() => downloadSelected('tsv')}>Download TSV</Button>
+                <Button data-testid="download-csv" variant="secondary" disabled={isWorking} onClick={() => downloadSelected('csv')}>Download CSV</Button>
+                <Button data-testid="download-json" variant="secondary" disabled={isWorking} onClick={() => downloadSelected('json')}>Download JSON</Button>
+              </div>
+
+              <div className="table-container" style={{ marginTop: '0.5rem' }}>
+                {table ? (
+                  <table>
+                    <tbody>
+                      {table.slice(0, 6).map((row, rIdx) => (
+                        <tr key={rIdx}>
+                          {row.map((col, cIdx) => (
+                            <td key={cIdx}>{col}</td>
+                          ))}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                ) : (
+                  <div>Loading preview…</div>
+                )}
+                {table && table.length > 6 && <div className="shade" />}
+              </div>
+            </>
+          ) : (
+            <div className="results">Select a result to preview and export.</div>
+          )}
+        </div>
+      </div>
+
+      <div className="table-preview" data-testid="section-data-management">
+        <div className="table-header">
+          <caption className="title">Data management</caption>
+          <div className="pill">{`${domainsInDb.length} domains`}</div>
         </div>
         <div className="table-body">
           <div className="table-actions">
@@ -445,74 +713,92 @@ const History: FunctionComponent<Props> = ({ onBack }) => {
               Apply now
             </Button>
           </div>
+
           <div className="table-actions">
-            <Button variant="secondary" disabled={isWorking} onClick={clearAll}>
-              Clear all local data
-            </Button>
+            {confirmClearAll ? (
+              <>
+                <Button
+                  data-testid="clear-all-confirm"
+                  variant="secondary"
+                  disabled={isWorking}
+                  onClick={() => {
+                    cancelConfirmClearAll();
+                    clearAll();
+                  }}
+                >
+                  Confirm clear all
+                </Button>
+                <Button data-testid="clear-all-cancel" variant="secondary" disabled={isWorking} onClick={cancelConfirmClearAll}>
+                  Cancel
+                </Button>
+              </>
+            ) : (
+              <Button data-testid="clear-all" variant="secondary" disabled={isWorking} onClick={startConfirmClearAll}>
+                Clear all local data
+              </Button>
+            )}
           </div>
-        </div>
-      </div>
 
-      {selected ? (
-        <div className="table-preview">
-          <div className="table-header">
-            <caption className="title">{selected.pageTitle ?? selected.domain}</caption>
-            <div className="pill">{`${selected.rowCount} rows`}</div>
+          <div className="table-actions" style={{ justifyContent: 'space-between', flexWrap: 'wrap' }}>
+            <div className="pill">Domains</div>
+            <div className="pill">{`${domainsInDb.length} total`}</div>
           </div>
-          <div className="table-body">
-            <div className="pill">{selected.url}</div>
-            <div className="pill">{formatTs(selected.extractedAt)}</div>
-            <div className="pill">{`schema v${selected.schemaVersion}`}</div>
-            <div className="table-actions">
-              <Button variant="primary" disabled={isWorking} onClick={copySelected}>Copy TSV</Button>
-              <Button variant="secondary" disabled={isWorking} onClick={() => downloadSelected('tsv')}>Download TSV</Button>
-              <Button variant="secondary" disabled={isWorking} onClick={() => downloadSelected('csv')}>Download CSV</Button>
-              <Button variant="secondary" disabled={isWorking} onClick={() => downloadSelected('json')}>Download JSON</Button>
-            </div>
-
-            <div className="table-container" style={{ marginTop: '0.5rem' }}>
-              {table ? (
-                <table>
-                  <tbody>
-                    {table.slice(0, 6).map((row, rIdx) => (
-                      <tr key={rIdx}>
-                        {row.map((col, cIdx) => (
-                          <td key={cIdx}>{col}</td>
-                        ))}
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              ) : (
-                <div>Loading preview…</div>
-              )}
-              {table && table.length > 6 && <div className="shade" />}
-            </div>
-          </div>
-        </div>
-      ) : (
-        <>
-          {items.length === 0 ? (
-            <div className="results">No saved extractions yet.</div>
+          {domainsInDb.length === 0 ? (
+            <div className="results">No domains yet.</div>
           ) : (
-            items.map((i) => (
-              <div className="table-preview" key={i.id}>
-                <div className="table-header">
-                  <caption className="title">{i.pageTitle ?? i.domain}</caption>
-                  <div className="pill">{`${i.rowCount} rows`}</div>
-                </div>
-                <div className="table-body">
-                  <div className="pill">{i.url}</div>
-                  <div className="pill">{formatTs(i.extractedAt)}</div>
-                  <div className="table-actions">
-                    <Button variant="primary" onClick={() => setSelectedId(i.id)}>Open</Button>
+            domainsInDb.map((d) => {
+              const enabled = enabledDomains.includes(d);
+              const isConfirmingDelete = confirmDeleteDomain === d;
+              return (
+                <div className="table-actions" key={d} style={{ justifyContent: 'space-between', flexWrap: 'wrap' }}>
+                  <div className="pill">{d}</div>
+                  <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+                    <Button
+                      variant={enabled ? 'secondary' : 'primary'}
+                      disabled={isWorking}
+                      onClick={() => toggleDomain(d, !enabled)}
+                    >
+                      {enabled ? 'Disable auto-capture' : 'Enable auto-capture'}
+                    </Button>
+                    {isConfirmingDelete ? (
+                      <>
+                        <Button
+                          data-testid="delete-domain-confirm"
+                          variant="secondary"
+                          disabled={isWorking}
+                          onClick={() => {
+                            cancelConfirmDeleteDomain();
+                            deleteDomain(d);
+                          }}
+                        >
+                          Confirm delete
+                        </Button>
+                        <Button
+                          data-testid="delete-domain-cancel"
+                          variant="secondary"
+                          disabled={isWorking}
+                          onClick={cancelConfirmDeleteDomain}
+                        >
+                          Cancel
+                        </Button>
+                      </>
+                    ) : (
+                      <Button
+                        data-testid="delete-domain"
+                        variant="secondary"
+                        disabled={isWorking}
+                        onClick={() => startConfirmDeleteDomain(d)}
+                      >
+                        Delete data
+                      </Button>
+                    )}
                   </div>
                 </div>
-              </div>
-            ))
+              );
+            })
           )}
-        </>
-      )}
+        </div>
+      </div>
     </div>
   );
 };

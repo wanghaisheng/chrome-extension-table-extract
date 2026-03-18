@@ -6,9 +6,11 @@
 * add domain opt-in and same-domain auto-capture after first manual save
 * add "Add to SQLite" action in the preview UI
 * add History view for recent extractions with detail preview
+* add History filters (domain/url/date + url pattern bucket) and export actions (copy/download TSV/CSV/JSON)
 * add domain controls (enable/disable auto-capture) and per-domain delete
 * add optional retention policy (keep last N per domain) and clear-all lifecycle action
 * scope schema versioning by URL pattern buckets (e.g. `/products/*` vs `/users/*`) to avoid cross-page-type bumps
+* allow optional pinning of an active schema per (domain + url pattern) bucket
 
 ### Testing
 
