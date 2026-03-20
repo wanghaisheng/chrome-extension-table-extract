@@ -2,6 +2,7 @@ import { JSX } from 'preact';
 import { useState, useRef, useEffect } from 'preact/hooks';
 import {createNewReportEntryRow} from '../utils/rows-api/report';
 import Button from './button';
+import { DONATE_URL, GITHUB_REPO_URL, SUPPORT_EMAIL } from '../utils/supportLinks';
 
 const FeedbackForm = (): JSX.Element => {
   const [reason, setReason] = useState('table not detected');
@@ -81,6 +82,20 @@ const FeedbackForm = (): JSX.Element => {
       <Button type="submit" variant="primary">
         Report
       </Button>
+
+      <div className="report-links" aria-label="Support links">
+        <a href={GITHUB_REPO_URL} target="_blank" rel="noreferrer">
+          GitHub
+        </a>
+        <span className="report-links-sep">·</span>
+        <a href={`mailto:${SUPPORT_EMAIL}`} target="_blank" rel="noreferrer">
+          Email
+        </a>
+        <span className="report-links-sep">·</span>
+        <a href={DONATE_URL} target="_blank" rel="noreferrer">
+          Donate
+        </a>
+      </div>
     </form>
   );
 };

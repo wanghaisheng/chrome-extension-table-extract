@@ -10,8 +10,9 @@ Key additions in this fork:
 - **Domain opt-in + auto capture**: once enabled for a domain, subsequent pages on the same domain auto-save extractions without repeated clicks.
 - **Better non-`<table>` extraction**: extract "table-like" data from ARIA grids, definition lists, repeating cards/articles (e.g. PubMed / Google Scholar), and structured lists.
 - **Export correctness**: History export/copy downloads full rows by default (preview remains capped for performance) and keeps stable ordering when a row index/sequence is present.
+- **Site scrapers (YAML) + custom import**: built-in YAML scrapers for PubMed/Google Scholar, plus a Wizard panel to import your own `.yml/.yaml` scrapers (custom rules override built-ins).
 
-[Repo](https://github.com/wanghaisheng/chrome-extension-table-extract) | [Issues](https://github.com/wanghaisheng/chrome-extension-table-extract/issues) | [Demo video](https://www.youtube.com/watch?v=RjOLjgCvayM) | [Install original extension from the Chrome Web Store](https://chromewebstore.google.com/detail/rowsx/abkccndhocmfdombbpmnhfjidcdcjjeo)
+[Repo](https://github.com/wanghaisheng/chrome-extension-table-extract) | [Issues](https://github.com/wanghaisheng/chrome-extension-table-extract/issues) | [Contact](mailto:admin@tiktokastudio.com) | [Donate](https://github.com/sponsors/wanghaisheng) | [Demo video](https://www.youtube.com/watch?v=RjOLjgCvayM) | [Install original extension from the Chrome Web Store](https://chromewebstore.google.com/detail/rowsx/abkccndhocmfdombbpmnhfjidcdcjjeo)
 
 
 ![RowsX](https://github.com/rows/X/assets/31993620/c80634eb-27d5-443f-b5de-bb8c2c21e1b3)
@@ -121,6 +122,20 @@ There are 2 different ways of building a custom scraper:
      ]
 }
 ```
+
+### Option A: built-in YAML scrapers (`src/scrappers/*.yml`)
+
+This fork includes built-in YAML scrapers for some sites (e.g. PubMed and Google Scholar) to keep exports stable.
+
+**URL patterns are glob-style**: only `*` is a wildcard. Everything else matches literally.
+
+### Option B (no-code): import a custom `.yml/.yaml` in the Wizard panel
+
+1. Open the extension popup.
+2. Go to `Wizard` -> import your `.yml/.yaml`.
+3. Open a matching page and extract as usual.
+
+Custom scrapers are stored in `chrome.storage.local`, are matched before built-ins, and can be deleted from the Wizard list.
 
 In this configuration the only thing that changes is the `type`, and it could be of different types:
 

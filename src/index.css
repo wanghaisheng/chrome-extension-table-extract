@@ -99,6 +99,25 @@ input[type="text"]:disabled {
   cursor: not-allowed;
 }
 
+.report-links {
+  margin-top: 0.75rem;
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+  justify-content: center;
+  color: var(--grey);
+  user-select: none;
+}
+
+.report-links a {
+  color: var(--grey);
+  text-decoration: underline;
+}
+
+.report-links-sep {
+  opacity: 0.7;
+}
+
 .skeleton {
   border-radius: 4px;
   animation: skeleton-loading 1s linear infinite alternate;

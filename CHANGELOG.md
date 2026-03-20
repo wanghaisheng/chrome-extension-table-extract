@@ -10,6 +10,9 @@
 * fix History export/copy to not truncate to 20 rows by default (preview remains capped)
 * keep export ordering stable and sort by detected seq/index when present
 * add structured (non-`<table>`) extraction fallback for ARIA tables/grids, definition lists, and repeating cards/articles (e.g. PubMed / Google Scholar)
+* add built-in YAML scrapers for PubMed and Google Scholar for stable paper-list exports
+* add Scraper Wizard panel with custom `.yml/.yaml` scraper import/list/delete (custom rules override built-ins)
+* add GitHub/Email/Donate links on the Report form
 * optimize popup UI for local-first flows (clear History sections, progressive filters, bulk export, safer destructive actions)
 * add domain controls (enable/disable auto-capture) and per-domain delete
 * add optional retention policy (keep last N per domain) and clear-all lifecycle action
