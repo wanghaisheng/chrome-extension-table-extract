@@ -1,0 +1,12 @@
+url: https://scholar.google.*/scholar?*
+header: Custom Scholar
+listElementsQuery: '#gs_res_ccl_mid .gs_r.gs_or.gs_scl'
+elementParser:
+  - title: XTitle
+    query: 'h3.gs_rt a'
+    type: text
+
+  - title: XLink
+    query: 'h3.gs_rt a'
+    type: link
+

@@ -1,0 +1,70 @@
+{
+  "id": "2026-03-20_scraper-wizard-and-custom-yml-import",
+  "createdAt": "2026-03-20T00:00:00Z",
+  "updatedAt": "2026-03-20T00:00:00Z",
+  "unit": {
+    "type": "openspec-change",
+    "changeId": "scraper-wizard-and-custom-yml-import",
+    "milestone": "M1",
+    "status": "active"
+  },
+  "intent": {
+    "summary": "Add a Wizard panel and support importing custom scrapper.yml files, stored locally and taking precedence over built-in scrapers.",
+    "whyNow": "We need a faster, iteration-friendly path to support list/card-based pages (CNKI / Scholar / PubMed) without requiring a rebuild for each selector tweak.",
+    "nonGoals": [
+      "No full AI selector generation pipeline in this milestone (only availability placeholder)",
+      "No online editing/enable-disable UI for imported scrapers",
+      "No auto-pagination scraping"
+    ]
+  },
+  "decisions": [
+    {
+      "id": "custom-precedence",
+      "title": "Custom scraper precedence",
+      "options": [
+        "custom-first",
+        "built-in-first"
+      ],
+      "decision": "custom-first",
+      "rationale": "Custom scrapers are used to iterate quickly; they must override built-in rules when they match."
+    },
+    {
+      "id": "custom-order",
+      "title": "Ordering among multiple matching custom scrapers",
+      "options": [
+        "latest-import-wins",
+        "first-import-wins"
+      ],
+      "decision": "latest-import-wins",
+      "rationale": "Users typically import updated YAML to override prior versions."
+    },
+    {
+      "id": "storage-key",
+      "title": "Storage location/key",
+      "options": [
+        "chrome.storage.local",
+        "indexeddb/sqlite"
+      ],
+      "decision": "chrome.storage.local: table_extract_custom_scrapers_v1",
+      "rationale": "Small metadata and YAML text; local storage is simplest and sufficient for M1."
+    }
+  ],
+  "actions": {
+    "filesTouched": [],
+    "commandsRun": [],
+    "testsRun": []
+  },
+  "evidence": {
+    "validationStatus": "unknown",
+    "notes": "Implementation pending."
+  },
+  "links": {
+    "changePaths": [
+      "openspec/changes/scraper-wizard-and-custom-yml-import/"
+    ],
+    "commitShas": [],
+    "changelogPaths": [],
+    "roadmapPaths": []
+  }
+}
+

@@ -8,6 +8,7 @@ import Preview from './components/preview';
 import LoadingSkeleton from './components/loading-skeleton';
 import { ExceptionMessage } from "./types";
 import History from './components/history';
+import ScraperWizard from './components/scraper-wizard';
 import { getDedupPolicy, setDedupPolicy, setDomainEnabled } from './utils/sqlite/storage';
 import {
   applyRetentionKeepLastPerDomain,
@@ -28,7 +29,7 @@ const App: FunctionalComponent = () => {
   const [exceptionOnScrapperResult, setException] = useState("");
   const [results, setResults] = useState([]);
   const [isReportFormOpen, toggleReportTab] = useReducer((isOpen) => !isOpen, false);
-  const [activePanel, setActivePanel] = useState<'extract' | 'history'>('extract');
+  const [activePanel, setActivePanel] = useState<'extract' | 'history' | 'wizard'>('extract');
 
   const hasExceptions = Boolean(exceptionOnScrapperResult);
   const showLoading = !hasExceptions && isLoading;
@@ -78,6 +79,8 @@ const App: FunctionalComponent = () => {
             {showLoading && (<LoadingSkeleton />)}
             {!showLoading && activePanel === 'history' ? (
               <History onBack={() => setActivePanel('extract')} />
+            ) : !showLoading && activePanel === 'wizard' ? (
+              <ScraperWizard />
             ) : (
               <>
                 {showResults && <Preview results={results} />}

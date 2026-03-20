@@ -2,7 +2,7 @@
 import { ERROR_MESSAGES, ErrorCodes } from './error-codes';
 import { getCurrentTab, runScrapper } from './utils/chrome';
 import { reportUsage } from './utils/rows-api/report';
-import { getScrapperOptionsByUrl } from './utils/scrapperUtils';
+import { getScrapperOptionsByUrlAsync } from './utils/scrapperUtils';
 
 async function getCurrentWebTab(): Promise<chrome.tabs.Tab | undefined> {
   // In real usage the UI is a popup, but in automated tests it may be opened as a tab.
@@ -43,7 +43,7 @@ async function scrap() {
     };
   }
 
-  const options = getScrapperOptionsByUrl(tab.url, tab.title);
+  const options = await getScrapperOptionsByUrlAsync(tab.url, tab.title);
 
   try {
     return await runScrapper(tab, options);

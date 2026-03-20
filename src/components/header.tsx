@@ -6,8 +6,8 @@ import Button from './button';
 
 interface Props {
   onReportClick: Dispatch<unknown>;
-  activePanel: 'extract' | 'history';
-  onSelectPanel: (panel: 'extract' | 'history') => void;
+  activePanel: 'extract' | 'history' | 'wizard';
+  onSelectPanel: (panel: 'extract' | 'history' | 'wizard') => void;
 }
 
 const Header = ({ onReportClick, activePanel, onSelectPanel }: Props): JSX.Element => {
@@ -33,6 +33,15 @@ const Header = ({ onReportClick, activePanel, onSelectPanel }: Props): JSX.Eleme
             onClick={() => onSelectPanel('history')}
           >
             History
+          </Button>
+          <Button
+            variant="text"
+            size="small"
+            className={activePanel === 'wizard' ? 'tab tab-active' : 'tab'}
+            aria-current={activePanel === 'wizard' ? 'page' : undefined}
+            onClick={() => onSelectPanel('wizard')}
+          >
+            Wizard
           </Button>
         </div>
         <Button variant="text" size="small" onClick={onReportClick as () => void}>Report</Button>
