@@ -71,7 +71,8 @@ export async function scrapHTMLTables() {
     let title = tableElement?.previousElementSibling?.innerText?.trim() ?? '';
     let scrapElement = tableElement;
 
-    while (title === '' || title.startsWith('.')) {
+    let safety = 0;
+    while ((title === '' || title.startsWith('.')) && scrapElement && safety++ < 50) {
       const titleElement = scrapElement?.querySelector(
         'caption,h6,h5,h4,h3,h2,h1,title'
       ) as DOM_Element;

@@ -26,6 +26,7 @@ import {
   setRetentionPolicy,
 } from '../utils/sqlite/storage';
 import { toCSV, toJSON, toTSV } from '../utils/export/serialize';
+import { sortMergedRowsBySeqLikeColumn } from '../utils/export/merge-order';
 
 type Props = {
   onBack: () => void;
@@ -229,7 +230,7 @@ const History: FunctionComponent<Props> = ({ onBack }) => {
     setWorking(true);
     try {
       setStatusMsg('');
-      const full = await getExtractionTable(selectedId, undefined);
+      const full = await getExtractionTable(selectedId);
       await navigator.clipboard.writeText(toTSV(full));
       setStatusMsg('Copied TSV to clipboard.');
     } finally {
@@ -242,7 +243,7 @@ const History: FunctionComponent<Props> = ({ onBack }) => {
     setWorking(true);
     try {
       setStatusMsg('');
-      const full = await getExtractionTable(selectedId, undefined);
+      const full = await getExtractionTable(selectedId);
       const content =
         format === 'tsv' ? toTSV(full) :
         format === 'csv' ? toCSV(full) :
@@ -269,6 +270,7 @@ const History: FunctionComponent<Props> = ({ onBack }) => {
     setWorking(true);
     try {
       setStatusMsg('');
+      const exportItems = [...items].sort((a, b) => a.id - b.id);
       const payload: any = {
         exportedAt: Date.now(),
         scope: {
@@ -281,11 +283,13 @@ const History: FunctionComponent<Props> = ({ onBack }) => {
         },
         items: [] as any[],
       };
+      let totalRows = 0;
 
-      for (let i = 0; i < items.length; i++) {
-        const it = items[i]!;
-        setStatusMsg(`Exporting ${i + 1}/${items.length}…`);
-        const table = await getExtractionTable(it.id, undefined);
+      for (let i = 0; i < exportItems.length; i++) {
+        const it = exportItems[i]!;
+        setStatusMsg(`Exporting ${i + 1}/${exportItems.length}…`);
+        const table = await getExtractionTable(it.id);
+        totalRows += Math.max(0, (table?.length ?? 0) - 1);
         payload.items.push({
           id: it.id,
           domain: it.domain,
@@ -311,7 +315,7 @@ const History: FunctionComponent<Props> = ({ onBack }) => {
       a.click();
       a.remove();
       URL.revokeObjectURL(url);
-      setStatusMsg(`Downloaded bulk JSON (${items.length} extractions).`);
+      setStatusMsg(`Downloaded bulk JSON (${exportItems.length} extractions, ${totalRows} rows).`);
     } finally {
       setWorking(false);
     }
@@ -322,6 +326,7 @@ const History: FunctionComponent<Props> = ({ onBack }) => {
     setWorking(true);
     try {
       setStatusMsg('');
+      const exportItems = [...items].sort((a, b) => a.id - b.id);
 
       type ItemTable = {
         meta: {
@@ -344,10 +349,10 @@ const History: FunctionComponent<Props> = ({ onBack }) => {
       // Base metadata columns for merged export.
       const metaHeaders = ['url', 'extracted_at', 'domain', 'url_pattern', 'schema_version', 'page_title'];
 
-      for (let i = 0; i < items.length; i++) {
-        const it = items[i]!;
-        setStatusMsg(`Exporting ${i + 1}/${items.length}…`);
-        const table = await getExtractionTable(it.id, undefined);
+      for (let i = 0; i < exportItems.length; i++) {
+        const it = exportItems[i]!;
+        setStatusMsg(`Exporting ${i + 1}/${exportItems.length}…`);
+        const table = await getExtractionTable(it.id);
         const headers = (table?.[0] ?? []).map((h) => String(h ?? ''));
         for (const h of headers) headerSet.add(h);
         tables.push({
@@ -390,7 +395,8 @@ const History: FunctionComponent<Props> = ({ onBack }) => {
         }
       }
 
-      const content = format === 'tsv' ? toTSV(merged) : toCSV(merged);
+      const sorted = sortMergedRowsBySeqLikeColumn(merged);
+      const content = format === 'tsv' ? toTSV(sorted.table) : toCSV(sorted.table);
       const blob = new Blob([content], { type: 'text/plain' });
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
@@ -402,7 +408,7 @@ const History: FunctionComponent<Props> = ({ onBack }) => {
       a.click();
       a.remove();
       URL.revokeObjectURL(url);
-      setStatusMsg(`Downloaded bulk ${format.toUpperCase()} (${merged.length - 1} rows).`);
+      setStatusMsg(`Downloaded bulk ${format.toUpperCase()} (${sorted.table.length - 1} rows).`);
     } finally {
       setWorking(false);
     }
@@ -958,4 +964,3 @@ const History: FunctionComponent<Props> = ({ onBack }) => {
 };
 
 export default History;
-

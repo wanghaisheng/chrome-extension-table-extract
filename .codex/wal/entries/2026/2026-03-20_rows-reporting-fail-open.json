@@ -1,0 +1,83 @@
+{
+  "id": "2026-03-20_rows-reporting-fail-open",
+  "createdAt": "2026-03-20T00:00:00Z",
+  "updatedAt": "2026-03-20T00:00:00Z",
+  "unit": {
+    "type": "openspec-change",
+    "changeId": "rows-reporting-fail-open",
+    "milestone": "M1-M2",
+    "status": "archived"
+  },
+  "intent": {
+    "summary": "Make Rows telemetry best-effort: missing config or network failures no longer trigger unhandled fetch errors.",
+    "whyNow": "Reporting failures surfaced as user-visible console errors (Failed to fetch) and could disrupt popup flows; telemetry must be fail-open.",
+    "nonGoals": [
+      "No new telemetry events",
+      "No retry/backoff pipeline",
+      "No UI for telemetry settings"
+    ]
+  },
+  "decisions": [
+    {
+      "id": "fail-open",
+      "title": "Error handling strategy for telemetry",
+      "options": [
+        "Propagate fetch errors",
+        "Best-effort (swallow errors and return null)"
+      ],
+      "decision": "Best-effort (swallow errors and return null).",
+      "rationale": "Telemetry is non-critical; user extraction/export flows must never depend on it."
+    },
+    {
+      "id": "missing-config",
+      "title": "Behavior when Rows env vars are missing",
+      "options": [
+        "Attempt request with undefined IDs",
+        "Short-circuit and do nothing"
+      ],
+      "decision": "Short-circuit and do nothing.",
+      "rationale": "Prevents invalid URLs like .../undefined/... and avoids noisy failures."
+    }
+  ],
+  "actions": {
+    "filesTouched": [
+      "src/utils/rows-api/fetch.ts",
+      "src/utils/rows-api/report.ts",
+      "tests/extension/popup-errors-and-telemetry.spec.ts",
+      "openspec/changes/archive/rows-reporting-fail-open/README.md",
+      "openspec/changes/archive/rows-reporting-fail-open/design.md",
+      "openspec/changes/archive/rows-reporting-fail-open/tasks.md"
+    ],
+    "commandsRun": [
+      "npm run check:syntax",
+      "npm run build",
+      "npx playwright test tests/extension/popup-errors-and-telemetry.spec.ts"
+    ],
+    "testsRun": [
+      "npm run check:syntax",
+      "npm run build",
+      "npx playwright test tests/extension/popup-errors-and-telemetry.spec.ts"
+    ]
+  },
+  "evidence": {
+    "validationStatus": "pass",
+    "notes": "Typecheck and build pass. With no Rows env vars configured, reporting becomes a no-op and does not emit unhandled promise rejections."
+  },
+  "followUps": [
+    "Optional: add lightweight debug logging behind a flag when reporting is skipped due to missing env vars."
+  ],
+  "links": {
+    "changePaths": [
+      "openspec/changes/archive/rows-reporting-fail-open/"
+    ],
+    "commitShas": [],
+    "changelogPaths": [],
+    "roadmapPaths": []
+  },
+  "topics": [
+    "telemetry",
+    "rows",
+    "fetch",
+    "fail-open"
+  ]
+}

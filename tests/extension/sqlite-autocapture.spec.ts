@@ -3,6 +3,14 @@ import { mkdtempSync, readFileSync } from 'fs';
 import { tmpdir } from 'os';
 import { join, resolve } from 'path';
 
+function parseCsvLine(line: string): string[] {
+  // Minimal CSV parser for our controlled fixtures (no embedded commas/newlines expected).
+  // Fail loudly if quoting appears so we don't silently mis-parse.
+  if (line.includes('"')) {
+    throw new Error(`Unexpected quoted CSV content: ${line.slice(0, 120)}`);
+  }
+  return line.split(',');
+}
 
 async function getExtensionIdFromContext(context: any): Promise<string> {
   // Preferred: MV3 background service worker exposes the extension id in its url.
@@ -415,6 +423,130 @@ test('manual opt-in enables domain auto-capture on subsequent URLs', async () =>
   }
 });
 
+test('dedup identical-to-last skips repeats within bucket', async () => {
+  const userDataDir = mkdtempSync(join(tmpdir(), 'table-extract-pw-'));
+  const extensionPath = resolve(process.cwd(), 'dist');
+
+  const context = await chromium.launchPersistentContext(userDataDir, {
+    headless: false,
+    channel: 'chromium',
+    args: [
+      `--disable-extensions-except=${extensionPath}`,
+      `--load-extension=${extensionPath}`,
+      '--no-first-run',
+      '--no-default-browser-check',
+    ],
+  });
+
+  const extensionId = await getExtensionIdFromContext(context);
+  const extensionUrl = `chrome-extension://${extensionId}/index.html`;
+  const extPage = await context.newPage();
+
+  await extPage.goto(extensionUrl, { waitUntil: 'domcontentloaded' });
+  await waitForPopupLoaded(extPage);
+
+  await extPage.waitForFunction(() => Boolean((window as any).__tableExtractDebug?.setDedupPolicy), { timeout: 20_000 });
+  await extPage.evaluate(async () => {
+    const dbg = (window as any).__tableExtractDebug;
+    await dbg.setDedupPolicy({ enabled: true, mode: 'identical_to_last' });
+  });
+
+  const url = 'https://example.test/dedup';
+  const r1 = await storeExtractionViaDebug(extPage, url, 'Dedup', [
+    ['H'],
+    ['1'],
+  ]);
+  const r2 = await storeExtractionViaDebug(extPage, url, 'Dedup', [
+    ['H'],
+    ['1'],
+  ]);
+  expect(r2.extractionId).toEqual(r1.extractionId);
+
+  const r3 = await storeExtractionViaDebug(extPage, url, 'Dedup', [
+    ['H'],
+    ['2'],
+  ]);
+  expect(r3.extractionId).not.toEqual(r1.extractionId);
+
+  try {
+    await Promise.race([
+      context.close(),
+      new Promise((_, reject) => setTimeout(() => reject(new Error('Timed out closing context')), 10_000)),
+    ]);
+  } catch {
+    // Best-effort.
+  }
+});
+
+test('bulk export merged CSV sorts by seq/index ascending when detectable', async () => {
+  const userDataDir = mkdtempSync(join(tmpdir(), 'table-extract-pw-'));
+  const extensionPath = resolve(process.cwd(), 'dist');
+
+  const context = await chromium.launchPersistentContext(userDataDir, {
+    headless: false,
+    channel: 'chromium',
+    args: [
+      `--disable-extensions-except=${extensionPath}`,
+      `--load-extension=${extensionPath}`,
+      '--no-first-run',
+      '--no-default-browser-check',
+    ],
+  });
+
+  const extensionId = await getExtensionIdFromContext(context);
+  const extensionUrl = `chrome-extension://${extensionId}/index.html`;
+  const extPage = await context.newPage();
+
+  await extPage.goto(extensionUrl, { waitUntil: 'domcontentloaded' });
+  await waitForPopupLoaded(extPage);
+
+  // Insert two extractions with an empty-header numeric "seq" column.
+  // Second extraction gets a lower seq to ensure global ordering is applied.
+  await storeExtractionViaDebug(extPage, 'https://example.test/a', 'A', [
+    ['', 'Title'],
+    ['2', 'b'],
+  ]);
+  await storeExtractionViaDebug(extPage, 'https://example.test/b', 'B', [
+    ['', 'Title'],
+    ['1', 'a'],
+  ]);
+
+  await extPage.getByRole('button', { name: 'History' }).click();
+  await waitForHistoryLoaded(extPage);
+
+  await extPage.getByTestId('bulk-download-format').selectOption('csv');
+  const dlPromise = extPage.waitForEvent('download', { timeout: 20_000 });
+  await extPage.getByTestId('bulk-download-go').click();
+  const dl = await dlPromise;
+
+  const savedPath = join(tmpdir(), `table-extract-bulk-${Date.now()}.csv`);
+  await Promise.race([
+    dl.saveAs(savedPath),
+    new Promise((_, reject) => setTimeout(() => reject(new Error('Timed out saving bulk download')), 20_000)),
+  ]);
+
+  const csv = readFileSync(savedPath, 'utf-8').trim();
+  const lines = csv.split(/\r?\n/);
+  expect(lines.length).toBeGreaterThanOrEqual(3); // header + 2 rows
+
+  const header = parseCsvLine(lines[0]!);
+  const seqIndex = header.findIndex((h) => h === '');
+  expect(seqIndex).toBeGreaterThanOrEqual(0);
+
+  const rows = lines.slice(1).map(parseCsvLine);
+  const seqs = rows.map((r) => r[seqIndex] ?? '');
+  expect(seqs.slice(0, 2)).toEqual(['1', '2']);
+
+  try {
+    await Promise.race([
+      context.close(),
+      new Promise((_, reject) => setTimeout(() => reject(new Error('Timed out closing context')), 10_000)),
+    ]);
+  } catch {
+    // Best-effort.
+  }
+});
+
 test('domain controls: disable auto-capture and delete domain data', async () => {
   const userDataDir = mkdtempSync(join(tmpdir(), 'table-extract-pw-'));
   const extensionPath = resolve(process.cwd(), 'dist');
@@ -706,4 +838,3 @@ test('backup and restore keeps history and exports', async () => {
 
   await context.close();
 });
-

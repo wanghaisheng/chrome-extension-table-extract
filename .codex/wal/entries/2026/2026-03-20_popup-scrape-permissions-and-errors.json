@@ -1,0 +1,84 @@
+{
+  "id": "2026-03-20_popup-scrape-permissions-and-errors",
+  "createdAt": "2026-03-20T00:00:00Z",
+  "updatedAt": "2026-03-20T00:00:00Z",
+  "unit": {
+    "type": "openspec-change",
+    "changeId": "popup-scrape-permissions-and-errors",
+    "milestone": "M1-M2",
+    "status": "archived"
+  },
+  "intent": {
+    "summary": "Make popup scraping robust: pick the correct web tab, detect file:// permission gaps, and surface script injection failures as actionable errors.",
+    "whyNow": "Silent scrape failures and file:// fixtures returning empty data caused confusion and slowed debugging; errors must be explicit and deterministic.",
+    "nonGoals": [
+      "No scraper logic changes",
+      "No auto-pagination crawling"
+    ]
+  },
+  "decisions": [
+    {
+      "id": "tab-selection",
+      "title": "Target tab selection for scraping",
+      "options": [
+        "Always use current active tab",
+        "Find the first http(s) tab in the window",
+        "Prefer active http(s), else lastAccessed http(s)"
+      ],
+      "decision": "Prefer active http(s) tab; else choose most recently accessed http(s) tab.",
+      "rationale": "Avoid extracting from the wrong page in test or focus edge cases while keeping normal behavior unchanged."
+    },
+    {
+      "id": "explicit-errors",
+      "title": "Error strategy for file:// and injection failures",
+      "options": [
+        "Return empty results",
+        "Return explicit error codes/messages"
+      ],
+      "decision": "Return explicit errors.",
+      "rationale": "Users need clear next actions (enable file URL access, reload/permissions) instead of silent empty output."
+    }
+  ],
+  "actions": {
+    "filesTouched": [
+      "src/background.ts",
+      "src/error-codes.ts",
+      "tests/extension/popup-errors-and-telemetry.spec.ts",
+      "openspec/changes/archive/popup-scrape-permissions-and-errors/README.md",
+      "openspec/changes/archive/popup-scrape-permissions-and-errors/design.md",
+      "openspec/changes/archive/popup-scrape-permissions-and-errors/tasks.md"
+    ],
+    "commandsRun": [
+      "npm run check:syntax",
+      "npm run build",
+      "npx playwright test tests/extension/popup-errors-and-telemetry.spec.ts"
+    ],
+    "testsRun": [
+      "npm run check:syntax",
+      "npm run build",
+      "npx playwright test tests/extension/popup-errors-and-telemetry.spec.ts"
+    ]
+  },
+  "evidence": {
+    "validationStatus": "pass",
+    "notes": "Typecheck and build pass. Existing extension E2E coverage continues to pass on core popup flows."
+  },
+  "followUps": [
+    "Optional: add an explicit UI hint/link to chrome://extensions for file URL access."
+  ],
+  "links": {
+    "changePaths": [
+      "openspec/changes/archive/popup-scrape-permissions-and-errors/"
+    ],
+    "commitShas": [],
+    "changelogPaths": [],
+    "roadmapPaths": []
+  },
+  "topics": [
+    "popup",
+    "scrape",
+    "permissions",
+    "file-url",
+    "mv3"
+  ]
+}

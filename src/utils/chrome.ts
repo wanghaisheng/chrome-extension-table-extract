@@ -1,6 +1,7 @@
 import { customScrapper } from './scrappers/custom';
 import { scrapHTMLTables } from './scrappers/html-tables';
 import { scrapDivHTMLTables, ScrapDivTablesOptions } from './scrappers/div-tables';
+import { scrapStructuredTables } from './scrappers/structured';
 
 export function getDomainName(url: string): string {
   const urlParsed = new URL(url);
@@ -61,6 +62,22 @@ export async function runScrapper(currentTab: chrome.tabs.Tab, options: Scrapper
       target: { tabId: currentTab.id },
       func: scrapHTMLTables,
     });
+
+    const htmlTables = computation[0].result ?? [];
+    const hasStrongTable = htmlTables.some((t) => {
+      const rows = t?.table?.length ?? 0;
+      const cols = (t?.table?.[0] ?? []).length;
+      return rows >= 2 && cols >= 2;
+    });
+    if (hasStrongTable) return htmlTables;
+
+    const structured = await chrome.scripting.executeScript({
+      target: { tabId: currentTab.id },
+      func: scrapStructuredTables,
+    });
+
+    const structuredTables = structured[0].result ?? [];
+    return structuredTables.length > 0 ? structuredTables : htmlTables;
   } else if (options.parseTables) {
     computation = await chrome.scripting.executeScript({
       target: { tabId: currentTab.id },

@@ -1,0 +1,71 @@
+{
+  "id": "2026-03-20_html-table-title-safety",
+  "createdAt": "2026-03-20T00:00:00Z",
+  "updatedAt": "2026-03-20T00:00:00Z",
+  "unit": {
+    "type": "openspec-change",
+    "changeId": "html-table-title-safety",
+    "milestone": "M1",
+    "status": "archived"
+  },
+  "intent": {
+    "summary": "Prevent pathological DOM traversal in HTML table title inference by adding a bounded loop guard.",
+    "whyNow": "A table title walk-up loop can become unbounded on certain pages, risking popup hangs and timeouts; the scraper must be deterministic.",
+    "nonGoals": [
+      "No changes to table parsing",
+      "No new title heuristics"
+    ]
+  },
+  "decisions": [
+    {
+      "id": "bounded-traversal",
+      "title": "Safety strategy for title inference loop",
+      "options": [
+        "Leave traversal unbounded",
+        "Cap traversal iterations and break safely"
+      ],
+      "decision": "Cap traversal iterations (50) and break when the element chain ends.",
+      "rationale": "Avoids hangs with minimal behavior change on normal pages."
+    }
+  ],
+  "actions": {
+    "filesTouched": [
+      "src/utils/scrappers/html-tables.ts",
+      "tests/extension/popup-errors-and-telemetry.spec.ts",
+      "openspec/changes/archive/html-table-title-safety/README.md",
+      "openspec/changes/archive/html-table-title-safety/design.md",
+      "openspec/changes/archive/html-table-title-safety/tasks.md"
+    ],
+    "commandsRun": [
+      "npm run check:syntax",
+      "npm run build",
+      "npx playwright test tests/extension/popup-errors-and-telemetry.spec.ts"
+    ],
+    "testsRun": [
+      "npm run check:syntax",
+      "npm run build",
+      "npx playwright test tests/extension/popup-errors-and-telemetry.spec.ts"
+    ]
+  },
+  "evidence": {
+    "validationStatus": "pass",
+    "notes": "Typecheck and build pass. Scraper no longer risks an unbounded parent traversal when table titles are missing."
+  },
+  "followUps": [
+    "Optional: record a lightweight debug metric when the safety cap is hit to spot problematic pages."
+  ],
+  "links": {
+    "changePaths": [
+      "openspec/changes/archive/html-table-title-safety/"
+    ],
+    "commitShas": [],
+    "changelogPaths": [],
+    "roadmapPaths": []
+  },
+  "topics": [
+    "scrape",
+    "html-table",
+    "loop-guard",
+    "reliability"
+  ]
+}

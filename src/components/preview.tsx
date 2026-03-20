@@ -2,11 +2,11 @@ import Button from './button';
 import './preview.css';
 import { array2tsv, hasImage } from '../utils/copy';
 import { FunctionComponent } from 'preact';
-import { useMemo, useState } from 'preact/hooks';
+import { useEffect, useMemo, useRef, useState } from 'preact/hooks';
 import { ScrapperResults } from '../utils/chrome';
 import { reportUsage } from '../utils/rows-api/report';
 import { applyRetentionKeepLastPerDomain, storeExtraction } from '../utils/sqlite/wa';
-import { getRetentionPolicy, setDomainEnabled } from '../utils/sqlite/storage';
+import { getRetentionPolicy, isDomainEnabled, setDomainEnabled } from '../utils/sqlite/storage';
 
 interface Props {
   results: ScrapperResults;
@@ -14,6 +14,7 @@ interface Props {
 
 const Preview: FunctionComponent<Props> = ({ results = [] }) => {
   const [sqliteStatusByKey, setSqliteStatusByKey] = useState<Record<string, 'idle' | 'saving' | 'saved' | 'error'>>({});
+  const sqliteInFlightByKey = useRef<Record<string, true>>({});
 
   const keyForResult = useMemo(() => {
     return (result: { title?: string; table: string[][] }) =>
@@ -22,9 +23,12 @@ const Preview: FunctionComponent<Props> = ({ results = [] }) => {
 
   const addToSQLite = async (result: { title?: string; table: string[][] }) => {
     const key = keyForResult(result);
-    if (sqliteStatusByKey[key] === 'saving') return;
+    if (sqliteInFlightByKey.current[key]) return;
+    const currentStatus = sqliteStatusByKey[key] ?? 'idle';
+    if (currentStatus === 'saving' || currentStatus === 'saved') return;
 
     try {
+      sqliteInFlightByKey.current[key] = true;
       setSqliteStatusByKey((prev) => ({ ...prev, [key]: 'saving' }));
       const tabResp = await chrome.runtime.sendMessage({ action: 'table-extract:get-current-web-tab' });
       if (!tabResp?.ok) {
@@ -33,8 +37,12 @@ const Preview: FunctionComponent<Props> = ({ results = [] }) => {
 
       const url = tabResp.url as string;
       const pageTitle = tabResp.title as string;
-      const { extractionId, domain } = await storeExtraction({ url, pageTitle, table: result.table });
+      const domain = new URL(url).hostname;
+
+      // Persist opt-in first so later popups auto-capture even if this write fails or the popup closes quickly.
       await setDomainEnabled(domain, true);
+
+      const { extractionId } = await storeExtraction({ url, pageTitle, table: result.table });
       const policy = await getRetentionPolicy();
       if (policy.enabled) {
         await applyRetentionKeepLastPerDomain(policy.keepLastPerDomain);
@@ -44,8 +52,33 @@ const Preview: FunctionComponent<Props> = ({ results = [] }) => {
     } catch (error) {
       console.error('Failed to store data in SQLite:', error);
       setSqliteStatusByKey((prev) => ({ ...prev, [key]: 'error' }));
+    } finally {
+      delete sqliteInFlightByKey.current[key];
     }
   };
+
+  useEffect(() => {
+    (async () => {
+      if (!Array.isArray(results) || results.length === 0) return;
+
+      const tabResp = await chrome.runtime.sendMessage({ action: 'table-extract:get-current-web-tab' });
+      if (!tabResp?.ok) return;
+
+      const url = tabResp.url as string;
+      const domain = new URL(url).hostname;
+      const enabled = await isDomainEnabled(domain);
+      if (!enabled) return;
+
+      // Auto-capture: behave like auto-clicking "Add to SQLite" for idle items.
+      for (const result of results) {
+        const key = keyForResult(result);
+        const status = sqliteStatusByKey[key] ?? 'idle';
+        if (status !== 'idle') continue;
+        if (sqliteInFlightByKey.current[key]) continue;
+        void addToSQLite(result);
+      }
+    })().catch((e) => console.warn('Auto-capture to SQLite failed:', e));
+  }, [results, keyForResult, sqliteStatusByKey]);
   
   const copyToClipboard = async (result: {
     title?: string;
@@ -83,7 +116,7 @@ const Preview: FunctionComponent<Props> = ({ results = [] }) => {
         const key = keyForResult(result);
         const status = sqliteStatusByKey[key] ?? 'idle';
         const sqliteLabel =
-          status === 'saving' ? 'Saving…' :
+          status === 'saving' ? 'Saving...' :
           status === 'saved' ? 'Saved' :
           status === 'error' ? 'Retry SQLite' :
           'Add to SQLite';

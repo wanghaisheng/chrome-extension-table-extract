@@ -6,11 +6,20 @@ import { getScrapperOptionsByUrl } from './utils/scrapperUtils';
 
 async function getCurrentWebTab(): Promise<chrome.tabs.Tab | undefined> {
   // In real usage the UI is a popup, but in automated tests it may be opened as a tab.
-  // Prefer a normal http(s) page tab from the last focused window.
+  // Prefer the active http(s) tab; otherwise pick the most recently accessed http(s) tab.
+  const active = await getCurrentTab();
+  if (active?.url?.startsWith('http://') || active?.url?.startsWith('https://')) {
+    return active;
+  }
+
   const tabs = await chrome.tabs.query({ lastFocusedWindow: true });
-  const webTab = tabs.find((t) => t.url?.startsWith('http://') || t.url?.startsWith('https://'));
-  if (webTab) return webTab;
-  return await getCurrentTab();
+  const httpTabs = tabs.filter((t) => t.url?.startsWith('http://') || t.url?.startsWith('https://'));
+  if (httpTabs.length === 0) return active;
+
+  const activeHttp = httpTabs.find((t) => t.active);
+  if (activeHttp) return activeHttp;
+
+  return httpTabs.reduce((best, t) => ((t.lastAccessed ?? 0) > (best.lastAccessed ?? 0) ? t : best), httpTabs[0]);
 }
 
 async function scrap() {
@@ -27,9 +36,24 @@ async function scrap() {
     };
   }
 
+  if (tab.url.startsWith('file://')) {
+    return {
+      code: ErrorCodes.FILE_URLS_NOT_ALLOWED,
+      message: ERROR_MESSAGES.get(ErrorCodes.FILE_URLS_NOT_ALLOWED)
+    };
+  }
+
   const options = getScrapperOptionsByUrl(tab.url, tab.title);
 
-  return await runScrapper(tab, options);
+  try {
+    return await runScrapper(tab, options);
+  } catch (error) {
+    console.warn('Scraper injection failed:', error);
+    return {
+      code: ErrorCodes.SCRIPT_INJECTION_FAILED,
+      message: ERROR_MESSAGES.get(ErrorCodes.SCRIPT_INJECTION_FAILED)
+    };
+  }
 }
 
 async function openInRows(message: { data: string; }) {

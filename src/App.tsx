@@ -8,7 +8,7 @@ import Preview from './components/preview';
 import LoadingSkeleton from './components/loading-skeleton';
 import { ExceptionMessage } from "./types";
 import History from './components/history';
-import { getDedupPolicy, getRetentionPolicy, isDomainEnabled, setDedupPolicy, setDomainEnabled } from './utils/sqlite/storage';
+import { getDedupPolicy, setDedupPolicy, setDomainEnabled } from './utils/sqlite/storage';
 import {
   applyRetentionKeepLastPerDomain,
   clearAllData,
@@ -62,38 +62,6 @@ const App: FunctionalComponent = () => {
       setLoading(false);
     });
   }, []);
-
-  useEffect(() => {
-    (async () => {
-      if (!Array.isArray(results) || results.length === 0) return;
-
-      const tabResp = await chrome.runtime.sendMessage({ action: 'table-extract:get-current-web-tab' });
-      if (!tabResp?.ok) return;
-
-      const url = tabResp.url as string;
-      const pageTitle = tabResp.title as string;
-      const domain = new URL(url).hostname;
-      const enabled = await isDomainEnabled(domain);
-      if (!enabled) return;
-
-      await Promise.all(
-        results.map((r: any) =>
-          storeExtraction({
-            url,
-            pageTitle,
-            table: r.table,
-          }),
-        ),
-      );
-
-      const policy = await getRetentionPolicy();
-      if (policy.enabled) {
-        await applyRetentionKeepLastPerDomain(policy.keepLastPerDomain);
-      }
-
-      console.log('Auto-captured extractions for domain:', domain);
-    })().catch((e) => console.warn('Auto-capture to SQLite failed:', e));
-  }, [results]);
 
   return (
     <>

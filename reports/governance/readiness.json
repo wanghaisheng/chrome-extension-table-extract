@@ -1,6 +1,6 @@
 {
   "ok": true,
-  "checked_at": "2026-03-18T04:23:12.109Z",
+  "checked_at": "2026-03-19T18:36:56.376Z",
   "checks": [
     {
       "id": "template.design.gate1_seed",
@@ -13,21 +13,66 @@
       "details": "tasks template closeout includes trophy + AC mapping + WAL."
     },
     {
-      "id": "active.specs_present",
+      "id": "active.present",
       "ok": true,
-      "details": "all active packets contain specs/<area>/spec.md."
-    },
-    {
-      "id": "active.specs_linked",
-      "ok": true,
-      "details": "all active packets link at least one spec in README."
+      "details": "no active change packets found; skipping active packet checks."
     },
     {
       "id": "archive.closeout_minimum",
       "ok": true,
-      "details": "all archived packets contain minimum closeout fields."
+      "details": "reported as warning (non-strict)."
     }
   ],
-  "warnings": [],
+  "warnings": [
+    {
+      "id": "archive.closeout_minimum",
+      "message": "some archived packets are missing minimum closeout fields (5).",
+      "missing": [
+        {
+          "packet": "openspec/changes/archive/auto-capture-opt-in",
+          "tasks": "openspec/changes/archive/auto-capture-opt-in/tasks.md",
+          "missing": [
+            "Closeout Rule section",
+            "\"commands that ran\"",
+            "\"pass or fail status\""
+          ]
+        },
+        {
+          "packet": "openspec/changes/archive/history-export-correctness",
+          "tasks": "openspec/changes/archive/history-export-correctness/tasks.md",
+          "missing": [
+            "\"pass or fail status\""
+          ]
+        },
+        {
+          "packet": "openspec/changes/archive/html-table-title-safety",
+          "tasks": "openspec/changes/archive/html-table-title-safety/tasks.md",
+          "missing": [
+            "Closeout Rule section",
+            "\"commands that ran\"",
+            "\"pass or fail status\""
+          ]
+        },
+        {
+          "packet": "openspec/changes/archive/popup-scrape-permissions-and-errors",
+          "tasks": "openspec/changes/archive/popup-scrape-permissions-and-errors/tasks.md",
+          "missing": [
+            "Closeout Rule section",
+            "\"commands that ran\"",
+            "\"pass or fail status\""
+          ]
+        },
+        {
+          "packet": "openspec/changes/archive/rows-reporting-fail-open",
+          "tasks": "openspec/changes/archive/rows-reporting-fail-open/tasks.md",
+          "missing": [
+            "Closeout Rule section",
+            "\"commands that ran\"",
+            "\"pass or fail status\""
+          ]
+        }
+      ]
+    }
+  ],
   "errors": []
 }

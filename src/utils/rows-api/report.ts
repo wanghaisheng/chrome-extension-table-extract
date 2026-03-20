@@ -7,10 +7,18 @@ interface ReportUsageParams {
   url?: string;
 }
 
-export async function createNewReportEntryRow(feedback? : string) {
+export async function createNewReportEntryRow(feedback?: string): Promise<void | null> {
+  // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+  // @ts-ignore
+  const spreadsheetId = import.meta.env.VITE_SPREADSHEET_ID as string | undefined;
+  // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+  // @ts-ignore
+  const tableId = import.meta.env.VITE_TABLE_ID as string | undefined;
+  if (!spreadsheetId || !tableId) return null;
+
   const tab = await getCurrentTab();
 
-  if (!tab) {
+  if (!tab?.url) {
     return null;
   }
 
@@ -19,7 +27,7 @@ export async function createNewReportEntryRow(feedback? : string) {
   const row_cells = [
     new Date().toUTCString(),
     tab.url,
-    new URL(tab.url!).hostname,
+    new URL(tab.url).hostname,
     userAgent.getBrowser().name,
     userAgent.getBrowser().version,
     feedback ?? 'no table detected'
@@ -27,15 +35,29 @@ export async function createNewReportEntryRow(feedback? : string) {
 
   // eslint-disable-next-line @typescript-eslint/ban-ts-comment
   // @ts-ignore
-  await fetch.post(`https://api.rows.com/v1/spreadsheets/${import.meta.env.VITE_SPREADSHEET_ID}/tables/${import.meta.env.VITE_TABLE_ID}/values/A1:F:append`, {
-    values: [row_cells]
-  });
+  try {
+    await fetch.post(
+      `https://api.rows.com/v1/spreadsheets/${spreadsheetId}/tables/${tableId}/values/A1:F:append`,
+      { values: [row_cells] }
+    );
+  } catch {
+    // best-effort; ignore network/config errors
+  }
 }
 
 export async function reportUsage(params: ReportUsageParams): Promise<void> {
+  // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+  // @ts-ignore
+  const spreadsheetId = import.meta.env.VITE_SPREADSHEET_ID as string | undefined;
+  // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+  // @ts-ignore
+  const tableIdUsage = import.meta.env.VITE_TABLE_ID_USAGE as string | undefined;
+  if (!spreadsheetId || !tableIdUsage) return;
+
   const { action } = params;
   const tab = await getCurrentTab();
-  if (!tab) {
+  const url = params.url ?? tab?.url;
+  if (!tab || !url) {
     return;
   }
 
@@ -43,8 +65,8 @@ export async function reportUsage(params: ReportUsageParams): Promise<void> {
 
   const row_cells = [
     new Date(),
-    params.url ? params.url : tab.url,
-    new URL(params.url ? params.url : tab.url!).hostname,
+    url,
+    new URL(url).hostname,
     userAgent.getBrowser().name,
     userAgent.getBrowser().version,
     action,
@@ -52,7 +74,12 @@ export async function reportUsage(params: ReportUsageParams): Promise<void> {
 
   // eslint-disable-next-line @typescript-eslint/ban-ts-comment
   // @ts-ignore
-  await fetch.post(`https://api.rows.com/v1/spreadsheets/${import.meta.env.VITE_SPREADSHEET_ID}/tables/${import.meta.env.VITE_TABLE_ID_USAGE}/values/A1:F:append`, {
-    values: [row_cells]
-  });
+  try {
+    await fetch.post(
+      `https://api.rows.com/v1/spreadsheets/${spreadsheetId}/tables/${tableIdUsage}/values/A1:F:append`,
+      { values: [row_cells] }
+    );
+  } catch {
+    // best-effort; ignore network/config errors
+  }
 }

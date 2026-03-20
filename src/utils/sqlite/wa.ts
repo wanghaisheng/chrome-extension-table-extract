@@ -646,7 +646,7 @@ export async function listRecentExtractions(limit = 25): Promise<ExtractionSumma
   });
 }
 
-export async function getExtractionTable(extractionId: number, maxRows: number | undefined = 20): Promise<string[][]> {
+export async function getExtractionTable(extractionId: number, maxRows?: number): Promise<string[][]> {
   return await withDbLock(async () => {
     const { sqlite3, db } = await getClient();
 
@@ -871,4 +871,3 @@ export async function restoreDbBytes(bytes: Uint8Array): Promise<void> {
     }
   });
 }
-

@@ -1,0 +1,89 @@
+{
+  "id": "2026-03-19_history-export-correctness",
+  "createdAt": "2026-03-19T00:00:00Z",
+  "updatedAt": "2026-03-19T00:00:00Z",
+  "unit": {
+    "type": "openspec-change",
+    "changeId": "history-export-correctness",
+    "milestone": "M1-M2",
+    "status": "archived"
+  },
+  "intent": {
+    "summary": "Make History exports deterministic and complete: no implicit 20-row truncation; define stable ordering rules for merged exports.",
+    "whyNow": "Users exporting multi-page results observed missing rows and confusing order; export correctness must match stored data and user expectations.",
+    "nonGoals": [
+      "No auto-pagination scraping",
+      "No scraper changes",
+      "No cloud sync"
+    ]
+  },
+  "decisions": [
+    {
+      "id": "getExtractionTable-default",
+      "title": "Default row limit semantics",
+      "options": [
+        "Default to 20 rows unless maxRows is provided",
+        "Default to unlimited unless maxRows is provided"
+      ],
+      "decision": "Default to unlimited; preview must pass an explicit limit.",
+      "rationale": "Exports/copy/download should never silently truncate. Preview remains fast by passing a concrete limit."
+    },
+    {
+      "id": "export-order",
+      "title": "Bulk export ordering",
+      "options": [
+        "Use current UI ordering (often extracted_at DESC)",
+        "Use added order (extractions.id ASC) and optionally seq/index asc"
+      ],
+      "decision": "Use added order baseline; implement conservative seq/index asc for merged formats when detectable.",
+      "rationale": "Added order is stable and matches user intent. Seq/index sorting matches common multi-page result expectations."
+    }
+  ],
+  "actions": {
+    "filesTouched": [
+      "tests/extension/sqlite-autocapture.spec.ts",
+      "src/components/history.tsx",
+      "src/utils/sqlite/wa.ts",
+      "src/utils/export/merge-order.ts",
+      "src/utils/export/merge-order.unit.test.ts",
+      "openspec/PLAN.md",
+      "openspec/PLAN1.md",
+      "openspec/changes/archive/history-export-correctness/README.md",
+      "openspec/changes/archive/history-export-correctness/design.md",
+      "openspec/changes/archive/history-export-correctness/tasks.md",
+      "openspec/changes/archive/history-export-correctness/specs/export/spec.md"
+    ],
+    "commandsRun": [
+      "npm run check:syntax",
+      "npm run test:unit",
+      "npm run build",
+      "npx playwright test tests/extension/sqlite-autocapture.spec.ts -g \"bulk export merged CSV\""
+    ],
+    "testsRun": [
+      "npm run test:unit",
+      "npx playwright test tests/extension/sqlite-autocapture.spec.ts -g \"bulk export merged CSV\""
+    ]
+  },
+  "evidence": {
+    "validationStatus": "pass",
+    "notes": "M1 (remove implicit 20-row truncation) and M2 (stable ordering + seq/index sort for merged export) implemented; validated via typecheck/unit/build."
+  },
+  "followUps": [
+    "Optional: add a Playwright E2E assertion that validates CSV/TSV ordering on a known fixture."
+  ],
+  "links": {
+    "changePaths": [
+      "openspec/changes/archive/history-export-correctness/"
+    ],
+    "commitShas": [],
+    "changelogPaths": [],
+    "roadmapPaths": []
+  },
+  "topics": [
+    "history",
+    "export",
+    "csv",
+    "tsv",
+    "sqlite"
+  ]
+}

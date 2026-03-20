@@ -1,0 +1,83 @@
+{
+  "id": "2026-03-20_performance-reliability-and-dedup",
+  "createdAt": "2026-03-20T00:00:00Z",
+  "updatedAt": "2026-03-20T00:00:00Z",
+  "unit": {
+    "type": "openspec-change",
+    "changeId": "performance-reliability-and-dedup",
+    "milestone": "M1-M3",
+    "status": "archived"
+  },
+  "intent": {
+    "summary": "Scale local-first SQLite usage safely: optional dedup, faster write/query paths, reliability UX for storage failures, and backup/restore workflows.",
+    "whyNow": "Heavier use (frequent captures and large tables) increases write volume and query latency; users also need portable recovery via backup/restore without risking corruption.",
+    "nonGoals": [
+      "No cloud sync",
+      "No scraper engine changes",
+      "No external services/accounts"
+    ]
+  },
+  "decisions": [
+    {
+      "id": "dedup-mode",
+      "title": "Dedup baseline strategy",
+      "options": [
+        "No dedup",
+        "Primary-key based dedup",
+        "Skip identical-to-last per bucket"
+      ],
+      "decision": "Skip identical-to-last per (domain + url pattern + schema version) bucket behind a flag (default off).",
+      "rationale": "Captures common repeated-capture cases with minimal schema complexity and clear guardrails."
+    }
+  ],
+  "actions": {
+    "filesTouched": [
+      "src/utils/sqlite/wa.ts",
+      "src/utils/sqlite/core.ts",
+      "src/utils/sqlite/dedup.ts",
+      "src/utils/sqlite/retention.ts",
+      "src/utils/sqlite/storage.ts",
+      "tests/extension/sqlite-autocapture.spec.ts",
+      "src/utils/sqlite/dedup.unit.test.ts",
+      "src/utils/sqlite/core.unit.test.ts",
+      "reports/bench/dedup-baseline.md",
+      "openspec/changes/archive/performance-reliability-and-dedup/README.md",
+      "openspec/changes/archive/performance-reliability-and-dedup/design.md",
+      "openspec/changes/archive/performance-reliability-and-dedup/tasks.md",
+      "openspec/changes/archive/performance-reliability-and-dedup/specs/scaling/spec.md"
+    ],
+    "commandsRun": [
+      "npm run test:unit",
+      "npx playwright test tests/extension/sqlite-autocapture.spec.ts -g \"dedup identical-to-last\"",
+      "npx playwright test tests/extension/sqlite-autocapture.spec.ts -g \"backup and restore keeps history and exports\""
+    ],
+    "testsRun": [
+      "npm run test:unit",
+      "npx playwright test tests/extension/sqlite-autocapture.spec.ts -g \"dedup identical-to-last\"",
+      "npx playwright test tests/extension/sqlite-autocapture.spec.ts -g \"backup and restore keeps history and exports\""
+    ]
+  },
+  "evidence": {
+    "validationStatus": "pass",
+    "notes": "Unit tests pass; Playwright validates dedup skip behavior and backup/restore parity; baseline dedup performance artifact recorded."
+  },
+  "followUps": [
+    "Optional: add a stress/soak run in CI that writes large extractions and records query latency trends as artifacts."
+  ],
+  "links": {
+    "changePaths": [
+      "openspec/changes/archive/performance-reliability-and-dedup/"
+    ],
+    "commitShas": [],
+    "changelogPaths": [],
+    "roadmapPaths": []
+  },
+  "topics": [
+    "sqlite",
+    "dedup",
+    "performance",
+    "reliability",
+    "backup-restore"
+  ]
+}
+

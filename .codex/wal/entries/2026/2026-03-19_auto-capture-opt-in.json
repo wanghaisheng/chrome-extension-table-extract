@@ -1,0 +1,78 @@
+{
+  "id": "2026-03-19_auto-capture-opt-in",
+  "createdAt": "2026-03-19T00:00:00Z",
+  "updatedAt": "2026-03-19T00:00:00Z",
+  "unit": {
+    "type": "openspec-change",
+    "changeId": "auto-capture-opt-in",
+    "milestone": "M1-M2",
+    "status": "archived"
+  },
+  "intent": {
+    "summary": "After a user clicks “Add to SQLite” once, subsequent popup opens on the same domain auto-store extractions (including different url patterns) and reflect Saved state in UI.",
+    "whyNow": "Users expected domain-level opt-in to persist; requiring repeated manual clicks across page types was confusing and slowed workflows.",
+    "nonGoals": [
+      "No auto-pagination",
+      "No scraper changes",
+      "No per-pattern opt-in UI"
+    ]
+  },
+  "decisions": [
+    {
+      "id": "preview-auto-click",
+      "title": "Auto-capture location",
+      "options": [
+        "Keep App-level results→store side effect",
+        "Move auto-capture into Preview (auto-click existing action)"
+      ],
+      "decision": "Move auto-capture into Preview and remove App-level auto-capture.",
+      "rationale": "Preview owns action/status UI; one code path avoids double writes and makes behavior visible."
+    },
+    {
+      "id": "optin-first",
+      "title": "Opt-in persistence ordering",
+      "options": [
+        "Store extraction first, then enable domain",
+        "Enable domain first, then store extraction"
+      ],
+      "decision": "Enable domain first, then store extraction.",
+      "rationale": "User intent is explicit; persisting the toggle first prevents losing opt-in if popup closes quickly or store fails."
+    }
+  ],
+  "actions": {
+    "filesTouched": [
+      "src/components/preview.tsx",
+      "src/App.tsx",
+      "openspec/changes/archive/auto-capture-opt-in/README.md",
+      "openspec/changes/archive/auto-capture-opt-in/design.md",
+      "openspec/changes/archive/auto-capture-opt-in/tasks.md"
+    ],
+    "commandsRun": [
+      "npx playwright test tests/extension/sqlite-autocapture.spec.ts -g \"manual opt-in enables domain auto-capture\""
+    ],
+    "testsRun": [
+      "npx playwright test tests/extension/sqlite-autocapture.spec.ts -g \"manual opt-in enables domain auto-capture\""
+    ]
+  },
+  "evidence": {
+    "validationStatus": "pass",
+    "notes": "Playwright E2E opt-in test passes; auto-capture is visible via Preview Saved state and guarded against duplicates."
+  },
+  "followUps": [
+    "Consider surfacing an explicit setting toggle in the popup for the current domain (optional UX improvement)."
+  ],
+  "links": {
+    "changePaths": [
+      "openspec/changes/archive/auto-capture-opt-in/"
+    ],
+    "commitShas": [],
+    "changelogPaths": [],
+    "roadmapPaths": []
+  },
+  "topics": [
+    "sqlite",
+    "auto-capture",
+    "popup",
+    "ux"
+  ]
+}

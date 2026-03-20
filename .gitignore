@@ -1,4 +1,5 @@
 dist
+artifacts/
 test-results/
 playwright-report/
 # Created by https://www.toptal.com/developers/gitignore/api/node,macos,windows,linux,webstorm,visualstudiocode
