@@ -3,6 +3,21 @@ import { mkdtempSync, mkdirSync, readFileSync } from 'fs';
 import { tmpdir } from 'os';
 import { join, resolve } from 'path';
 
+function parseCsvLine(line: string): string[] {
+  // Minimal CSV parser for our controlled fixtures (no embedded commas/newlines expected).
+  if (line.includes('"')) {
+    throw new Error(`Unexpected quoted CSV content: ${line.slice(0, 120)}`);
+  }
+  return line.split(',');
+}
+
+function loadCsvHeader(filePath: string): string[] {
+  const csv = readFileSync(filePath, 'utf8').trim();
+  const firstLine = csv.split(/\r?\n/)[0];
+  if (!firstLine) return [];
+  return parseCsvLine(firstLine);
+}
+
 async function getExtensionIdFromContext(context: any): Promise<string> {
   const deadline = Date.now() + 15_000;
   while (Date.now() < deadline) {
@@ -73,24 +88,35 @@ test('exports fixture CSVs for manual review (cnki/scholar/pubmed)', async () =>
     },
     {
       name: 'google-scholar-result',
-      url: 'https://scholar.fixture.test/',
+      url: 'https://scholar.google.com/scholar?q=gut+health&hl=en&as_sdt=0,5',
       file: resolve(process.cwd(), 'tests', 'google-scholar-result.html'),
       expectText: 'Cited by',
     },
     {
       name: 'pubmed',
-      url: 'https://pubmed.fixture.test/',
+      url: 'https://pubmed.ncbi.nlm.nih.gov/?term=gut+health',
       file: resolve(process.cwd(), 'tests', 'pubmed.html'),
     },
   ];
 
-  const fixtureByUrl = new Map(fixtures.map((f) => [f.url, f]));
-
   await appPage.route('**/*', async (route) => {
     const reqUrl = route.request().url();
-    const fixture = fixtureByUrl.get(reqUrl);
-    if (fixture) {
-      const body = readFileSync(fixture.file, 'utf8');
+    const u = new URL(reqUrl);
+
+    if (u.hostname === 'cnki.fixture.test') {
+      const body = readFileSync(resolve(process.cwd(), 'tests', 'cnki.html'), 'utf8');
+      await route.fulfill({ status: 200, contentType: 'text/html', body });
+      return;
+    }
+
+    if (u.hostname === 'scholar.google.com' && u.pathname === '/scholar') {
+      const body = readFileSync(resolve(process.cwd(), 'tests', 'google-scholar-result.html'), 'utf8');
+      await route.fulfill({ status: 200, contentType: 'text/html', body });
+      return;
+    }
+
+    if (u.hostname === 'pubmed.ncbi.nlm.nih.gov' && u.pathname === '/') {
+      const body = readFileSync(resolve(process.cwd(), 'tests', 'pubmed.html'), 'utf8');
       await route.fulfill({ status: 200, contentType: 'text/html', body });
       return;
     }
@@ -127,6 +153,22 @@ test('exports fixture CSVs for manual review (cnki/scholar/pubmed)', async () =>
 
       const outputPath = join(outDir, `${fixture.name}.csv`);
       await exportLatestExtractionCsv(extPage, outputPath);
+
+      // Basic schema assertions: ensure the exported CSV includes key columns for these fixtures.
+      if (fixture.name === 'google-scholar-result') {
+        const header = loadCsvHeader(outputPath);
+        for (const col of ['Title', 'Link', 'AuthorsLine', 'Snippet', 'CitedByText']) {
+          expect(header).toContain(col);
+        }
+      }
+      if (fixture.name === 'pubmed') {
+        const header = loadCsvHeader(outputPath);
+        for (const col of ['Title', 'Link', 'PMID']) {
+          expect(header).toContain(col);
+        }
+        // Ensure we didn't export the timeline-only table as the primary output.
+        expect(header).not.toEqual(['Year', 'Number of Results']);
+      }
     }
   } finally {
     await context.close();

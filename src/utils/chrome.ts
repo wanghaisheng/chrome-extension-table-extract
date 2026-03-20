@@ -37,7 +37,7 @@ export interface ScrapperOptions {
   elementParser?: Array<{
     title: string;
     query?: string; // if the query is not specified, the scrapper will use the own element
-    type: 'text' | 'image' | 'clean-url' | 'link' | 'get-attribute';
+    type: 'text' | 'image' | 'clean-url' | 'link' | 'get-attribute' | 'float' | 'self-link';
     attribute?: string;
   }>;
   parseTables?: ScrapDivTablesOptions;

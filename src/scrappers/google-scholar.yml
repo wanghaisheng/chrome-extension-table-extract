@@ -1,0 +1,52 @@
+url: https://scholar.google.*/scholar?*
+header: Google Scholar results
+listElementsQuery: '#gs_res_ccl_mid .gs_r.gs_or.gs_scl'
+elementParser:
+  - title: Title
+    query: 'h3.gs_rt a'
+    type: text
+
+  - title: Link
+    query: 'h3.gs_rt a'
+    type: link
+
+  - title: AuthorsLine
+    query: .gs_a
+    type: text
+
+  - title: Snippet
+    query: .gs_rs
+    type: text
+
+  - title: CitedByText
+    query: 'a[href^="/scholar?cites="]'
+    type: text
+
+  - title: CitedByLink
+    query: 'a[href^="/scholar?cites="]'
+    type: link
+
+  - title: VersionsText
+    query: 'a[href*="cluster="]'
+    type: text
+
+  - title: VersionsLink
+    query: 'a[href*="cluster="]'
+    type: link
+
+  - title: RelatedText
+    query: 'a[href^="/scholar?q=related:"]'
+    type: text
+
+  - title: RelatedLink
+    query: 'a[href^="/scholar?q=related:"]'
+    type: link
+
+  - title: PDFOrHTMLText
+    query: '.gs_ggs a'
+    type: text
+
+  - title: PDFOrHTMLLink
+    query: '.gs_ggs a'
+    type: link
+

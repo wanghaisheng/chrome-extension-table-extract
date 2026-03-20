@@ -146,6 +146,18 @@ parseTables: {
 > [!TIP]
 > The `mergeTablesBy` property defines the strategy for combining multiple tables into a single dataset. This parameter is optional and could be set as `row`, which means that tables will be merged by rows, resulting in a single table with all rows combined. If set to `column`, tables will be merged by columns, resulting in a single table with all columns combined.
 
+### URL pattern matching (YAML `url`)
+
+YAML scrapers use a simple glob syntax for `url`:
+
+- `*` matches any substring
+- everything else is matched literally (so `?` / `.` are not treated as regex operators)
+
+Examples:
+
+- `https://pubmed.ncbi.nlm.nih.gov/?*`
+- `https://scholar.google.*/scholar?*`
+
 ### When use `.example` and `[class*="example"]`
 
 `.example` and `[class*="example"]` are both CSS selectors that can be used to select elements in an HTML document. However, they have different purposes and should be used in different situations.

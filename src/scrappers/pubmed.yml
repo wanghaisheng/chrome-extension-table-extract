@@ -1,0 +1,32 @@
+url: https://pubmed.ncbi.nlm.nih.gov/?*
+header: PubMed results
+listElementsQuery: 'article.full-docsum'
+elementParser:
+  - title: Pos
+    query: .position-number
+    type: text
+
+  - title: Title
+    query: a.docsum-title
+    type: text
+
+  - title: Link
+    query: a.docsum-title
+    type: link
+
+  - title: Authors
+    query: '.docsum-authors.full-authors,.docsum-authors.short-authors'
+    type: text
+
+  - title: JournalCitation
+    query: '.docsum-journal-citation.full-journal-citation,.docsum-journal-citation.short-journal-citation'
+    type: text
+
+  - title: PMID
+    query: .docsum-pmid
+    type: text
+
+  - title: DocsumMeta
+    query: .docsum-citation
+    type: text
+
