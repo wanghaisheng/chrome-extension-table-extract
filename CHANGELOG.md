@@ -7,6 +7,9 @@
 * add "Add to SQLite" action in the preview UI
 * add History view for recent extractions with detail preview
 * add History filters (domain/url/date + url pattern bucket) and export actions (copy/download TSV/CSV/JSON)
+* fix History export/copy to not truncate to 20 rows by default (preview remains capped)
+* keep export ordering stable and sort by detected seq/index when present
+* add structured (non-`<table>`) extraction fallback for ARIA tables/grids, definition lists, and repeating cards/articles (e.g. PubMed / Google Scholar)
 * optimize popup UI for local-first flows (clear History sections, progressive filters, bulk export, safer destructive actions)
 * add domain controls (enable/disable auto-capture) and per-domain delete
 * add optional retention policy (keep last N per domain) and clear-all lifecycle action
@@ -17,17 +20,22 @@
 
 * add Playwright extension E2E test for SQLite opt-in + auto-capture (`npm run test:pw`)
 * extend Playwright E2E to cover domain controls and clear-all
+* migrate E2E suite to Playwright-only (remove Puppeteer/Jest-Puppeteer config)
+* add E2E coverage for file:// friendly error messaging and Rows telemetry fail-open
+* add fixtures/tests for structured extraction on Google Scholar / PubMed-like pages
 * add SQLite core unit tests (`npm run test:unit`)
 * add retention unit tests (`npm run test:unit`)
 
 ### Docs
 
 * rebrand docs to "Table Extract" and update repository URLs / attribution
+* document Playwright test entrypoints and Chrome/Edge packaging commands
 * add and maintain local-first roadmap (`roadmap.md`)
 
 ### Security
 
 * allow WebAssembly in extension pages via MV3 CSP (`wasm-unsafe-eval`) for SQLite runtime
+* keep `npm audit` clean by removing incompatible YAML plugin and pinning transitive dependency fixes via `overrides`
 
 ## [1.30.6](https://github.com/rows/X/compare/v1.30.5...v1.30.6) (2025-12-04)
 

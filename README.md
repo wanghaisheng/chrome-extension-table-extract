@@ -6,10 +6,12 @@ This repository is a derivative work based on the original open-source RowsX pro
 
 Key additions in this fork:
 
-- **Local persistence**: store extracted data into a wasm-backed SQLite database for later querying and reuse (in progress).
-- **Domain opt-in + auto capture**: once enabled for a domain, subsequent pages on the same domain can auto-save extractions without repeated clicks (in progress).
+- **Local persistence**: store extracted data into a wasm-backed SQLite database for later querying and reuse.
+- **Domain opt-in + auto capture**: once enabled for a domain, subsequent pages on the same domain auto-save extractions without repeated clicks.
+- **Better non-`<table>` extraction**: extract "table-like" data from ARIA grids, definition lists, repeating cards/articles (e.g. PubMed / Google Scholar), and structured lists.
+- **Export correctness**: History export/copy downloads full rows by default (preview remains capped for performance) and keeps stable ordering when a row index/sequence is present.
 
-[Repo](https://github.com/wanghaisheng/chrome-extension-table-extract) · [Issues](https://github.com/wanghaisheng/chrome-extension-table-extract/issues) · [Demo video](https://www.youtube.com/watch?v=RjOLjgCvayM) · [Install original extension from the Chrome Web Store](https://chromewebstore.google.com/detail/rowsx/abkccndhocmfdombbpmnhfjidcdcjjeo)
+[Repo](https://github.com/wanghaisheng/chrome-extension-table-extract) | [Issues](https://github.com/wanghaisheng/chrome-extension-table-extract/issues) | [Demo video](https://www.youtube.com/watch?v=RjOLjgCvayM) | [Install original extension from the Chrome Web Store](https://chromewebstore.google.com/detail/rowsx/abkccndhocmfdombbpmnhfjidcdcjjeo)
 
 
 ![RowsX](https://github.com/rows/X/assets/31993620/c80634eb-27d5-443f-b5de-bb8c2c21e1b3)
@@ -44,6 +46,12 @@ you can initiate development mode by running the following command in your termi
 npm run dev
 ```
 
+To build a production bundle (writes to `./dist`):
+
+```bash
+npm run build
+```
+
 Once your development environment is set up, follow these steps to start using our Chrome extension on your machine:
 
 > [!NOTE]
@@ -54,24 +62,39 @@ Once your development environment is set up, follow these steps to start using o
 > 3. Click the "Load unpacked" button.
 > 4. Select the directory containing your extension project. For example `./dist`.
 > 5. Your extension should now be loaded and running in development mode.
-> 6. Pin the extension to reach it easily :smiley:
+> 6. Pin the extension to reach it easily.
 > 7. You can make changes to your extension files, and they will automatically be reflected in the browser.
+
+## Testing
+
+- Unit tests: `npm run test:unit`
+- Extension E2E (Playwright): `npm run test:pw`
+
+## Packaging (Chrome / Edge)
+
+`dist/` is the unpacked extension directory. For store uploads, use the zip artifacts:
+
+- Chrome: `npm run pack:chrome`
+- Edge: `npm run pack:edge`
+- Both: `npm run pack:all`
+
+These commands build first, then output zipped artifacts under `./artifacts/`.
 
 ## Destinations
 
 Table Extract supports multiple post-extraction destinations.
 
 - **Open in Rows** (existing): export the extracted table to Rows by opening `https://rows.com/new` and injecting a TSV payload into `localStorage` under the `rows_x` key.
-- **Add extracted data to SQLite** (this fork, in progress): save extracted tables into a wasm SQLite database managed by the extension.
+- **Add extracted data to SQLite** (this fork): save extracted tables into a wasm SQLite database managed by the extension.
 
-### SQLite auto-capture behavior (this fork, in progress)
+### SQLite auto-capture behavior (this fork)
 
 - **First time per domain**: user clicks "Add extracted data to SQLite" to opt in that domain.
 - **After opt-in**: for subsequent URLs under the same domain, once extraction succeeds, the extension automatically writes the extracted data to SQLite without requiring another click.
 
 ### .env File
 
-The environment configuration file plays a crucial role in managing the application's integration with the Rows API (this is needed to store the information of user feedback, if you're not doing anywork related with that we could leave it empty in our local computer). The env file contains three specific variables essential for ensuring that the application can securely and accurately interact with the Rows API. Here’s a brief explanation of each variable:
+The `.env` file is optional. It’s only used for Rows API telemetry/feedback reporting. If you don’t use that feature, you can leave it empty and the extension will still work.
 
 - `VITE_ROWS_API_KEY`: This variable stores the Rows API key, which is necessary for authenticating requests made from our application to the Rows service. It ensures that our application has the permission to access and modify the spreadsheet data.
 - `VITE_SPREADSHEET_ID`: This variable holds the ID of the spreadsheet we want to access. It specifies the target spreadsheet within the Rows platform where all the data from our application is stored or retrieved from.
