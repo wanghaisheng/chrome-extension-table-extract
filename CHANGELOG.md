@@ -31,7 +31,7 @@
 
 ### Docs
 
-* rebrand docs to "Table Extract" and update repository URLs / attribution
+* rebrand docs to "SupaTable Extract" and update repository URLs / attribution
 * document Playwright test entrypoints and Chrome/Edge packaging commands
 * add and maintain local-first roadmap (`roadmap.md`)
 

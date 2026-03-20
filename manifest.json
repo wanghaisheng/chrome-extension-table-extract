@@ -1,5 +1,5 @@
 {
-  "name": "Table Extract",
+  "name": "SupaTable Extract",
   "description": "Extract tables and lists from web pages and export or save them locally.",
   "manifest_version": 3,
   "background": {

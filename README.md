@@ -1,6 +1,6 @@
-# Table Extract (fork)
+# SupaTable Extract (fork)
 
-Table Extract is a Chrome extension that extracts tables and lists from web pages and lets you use the data in different destinations.
+SupaTable Extract is a Chrome extension that extracts tables and lists from web pages and lets you use the data in different destinations.
 
 This repository is a derivative work based on the original open-source RowsX project by [Rows.com](https://rows.com) and is distributed under the same MIT license. See `LICENSE`.
 
@@ -18,9 +18,9 @@ Key additions in this fork:
 ![RowsX](https://github.com/rows/X/assets/31993620/c80634eb-27d5-443f-b5de-bb8c2c21e1b3)
 
 
-## About Table Extract
+## About SupaTable Extract
 
-Table Extract is a fork of the open-source RowsX extension. It keeps the original goal of helping people move tabular data from the browser into tools they control, and adds new destinations such as local SQLite storage.
+SupaTable Extract is a fork of the open-source RowsX extension. It keeps the original goal of helping people move tabular data from the browser into tools they control, and adds new destinations such as local SQLite storage.
 
 The original RowsX was built by the Rows team during a hackathon in January 2024 to help users get data from the web into spreadsheets. This fork keeps the same spirit, but focuses on:
 
@@ -83,7 +83,7 @@ These commands build first, then output zipped artifacts under `./artifacts/`.
 
 ## Destinations
 
-Table Extract supports multiple post-extraction destinations.
+SupaTable Extract supports multiple post-extraction destinations.
 
 - **Open in Rows** (existing): export the extracted table to Rows by opening `https://rows.com/new` and injecting a TSV payload into `localStorage` under the `rows_x` key.
 - **Add extracted data to SQLite** (this fork): save extracted tables into a wasm SQLite database managed by the extension.
