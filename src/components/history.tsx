@@ -168,26 +168,27 @@ const History: FunctionComponent<Props> = ({ onBack }) => {
     }
   };
 
+  const buildFilters = () => {
+    const afterMs = filterAfter ? new Date(`${filterAfter}T00:00:00`).getTime() : undefined;
+    const beforeMs = filterBefore ? new Date(`${filterBefore}T23:59:59`).getTime() : undefined;
+    const explicitSchema = filterSchemaVersion.trim() ? Number(filterSchemaVersion) : undefined;
+    const schemaVersion =
+      Number.isFinite(explicitSchema as any) ? explicitSchema : (pinnedSchemaVersion ?? undefined);
+    return {
+      domain: filterDomain.trim() || undefined,
+      urlSubstring: filterUrl.trim() || undefined,
+      extractedAfter: afterMs,
+      extractedBefore: beforeMs,
+      urlPattern: filterDomain.trim() ? filterPattern : undefined,
+      schemaVersion,
+    };
+  };
+
   const applyFilters = async () => {
     setWorking(true);
     try {
       setStatusMsg('');
-      const afterMs = filterAfter ? new Date(`${filterAfter}T00:00:00`).getTime() : undefined;
-      const beforeMs = filterBefore ? new Date(`${filterBefore}T23:59:59`).getTime() : undefined;
-      const explicitSchema = filterSchemaVersion.trim() ? Number(filterSchemaVersion) : undefined;
-      const schemaVersion =
-        Number.isFinite(explicitSchema as any) ? explicitSchema : (pinnedSchemaVersion ?? undefined);
-      const extractions = await listExtractions(
-        {
-          domain: filterDomain.trim() || undefined,
-          urlSubstring: filterUrl.trim() || undefined,
-          extractedAfter: afterMs,
-          extractedBefore: beforeMs,
-          urlPattern: filterDomain.trim() ? filterPattern : undefined,
-          schemaVersion,
-        },
-        50,
-      );
+      const extractions = await listExtractions(buildFilters(), 50);
       setItems(extractions);
       setSelectedId(null);
     } catch (e: any) {
@@ -266,11 +267,11 @@ const History: FunctionComponent<Props> = ({ onBack }) => {
   };
 
   const bulkDownloadShownAsJson = async () => {
-    if (items.length === 0) return;
     setWorking(true);
     try {
       setStatusMsg('');
-      const exportItems = [...items].sort((a, b) => a.id - b.id);
+      const exportItems = (await listExtractions(buildFilters(), null)).sort((a, b) => a.id - b.id);
+      if (exportItems.length === 0) return;
       const payload: any = {
         exportedAt: Date.now(),
         scope: {
@@ -322,11 +323,11 @@ const History: FunctionComponent<Props> = ({ onBack }) => {
   };
 
   const bulkDownloadShownAsMerged = async (format: 'tsv' | 'csv') => {
-    if (items.length === 0) return;
     setWorking(true);
     try {
       setStatusMsg('');
-      const exportItems = [...items].sort((a, b) => a.id - b.id);
+      const exportItems = (await listExtractions(buildFilters(), null)).sort((a, b) => a.id - b.id);
+      if (exportItems.length === 0) return;
 
       type ItemTable = {
         meta: {
@@ -728,9 +729,9 @@ const History: FunctionComponent<Props> = ({ onBack }) => {
                   onInput={(e: any) => setBulkDownloadFormat((e.currentTarget?.value ?? 'json') as any)}
                   style={{ width: '11rem' }}
                 >
-                  <option value="json">JSON (all shown)</option>
-                  <option value="tsv">TSV (merged)</option>
-                  <option value="csv">CSV (merged)</option>
+                  <option value="json">JSON (all matching)</option>
+                  <option value="tsv">TSV (merged, all matching)</option>
+                  <option value="csv">CSV (merged, all matching)</option>
                 </select>
                 <Button
                   data-testid="bulk-download-go"

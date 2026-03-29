@@ -481,7 +481,7 @@ export type ExtractionFilters = {
   schemaVersion?: number;
 };
 
-export async function listExtractions(filters: ExtractionFilters = {}, limit = 50): Promise<ExtractionSummary[]> {
+export async function listExtractions(filters: ExtractionFilters = {}, limit: number | null = 50): Promise<ExtractionSummary[]> {
   return await withDbLock(async () => {
     const { sqlite3, db } = await getClient();
 
@@ -515,6 +515,7 @@ export async function listExtractions(filters: ExtractionFilters = {}, limit = 5
 
     const whereSql = where.length ? `WHERE ${where.join(' AND ')}` : '';
 
+    const limitSql = typeof limit === 'number' && Number.isFinite(limit) ? 'LIMIT ?' : '';
     const res = await execWithParams(
       sqlite3,
       db,
@@ -533,9 +534,9 @@ export async function listExtractions(filters: ExtractionFilters = {}, limit = 5
       JOIN domains d ON d.id = s.domain_id
       ${whereSql}
       ORDER BY e.extracted_at DESC, e.id DESC
-      LIMIT ?
+      ${limitSql}
     `,
-      [...params, limit],
+      limitSql ? [...params, limit] : params,
     );
 
     return (res.rows ?? []).map((r: any[]) => ({

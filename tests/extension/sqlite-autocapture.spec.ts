@@ -547,6 +547,134 @@ test('bulk export merged CSV sorts by seq/index ascending when detectable', asyn
   }
 });
 
+test('bulk export merged CSV handles 50 pages x 50 rows', async () => {
+  const userDataDir = mkdtempSync(join(tmpdir(), 'table-extract-pw-'));
+  const extensionPath = resolve(process.cwd(), 'dist');
+
+  const context = await chromium.launchPersistentContext(userDataDir, {
+    headless: false,
+    channel: 'chromium',
+    args: [
+      `--disable-extensions-except=${extensionPath}`,
+      `--load-extension=${extensionPath}`,
+      '--no-first-run',
+      '--no-default-browser-check',
+    ],
+  });
+
+  const extensionId = await getExtensionIdFromContext(context);
+  const extensionUrl = `chrome-extension://${extensionId}/index.html`;
+  const extPage = await context.newPage();
+
+  await extPage.goto(extensionUrl, { waitUntil: 'domcontentloaded' });
+  await waitForPopupLoaded(extPage);
+
+  const headers = ['Page', 'Row', 'Value'];
+  for (let pageIdx = 1; pageIdx <= 50; pageIdx++) {
+    const rows: string[][] = [];
+    for (let rowIdx = 1; rowIdx <= 50; rowIdx++) {
+      rows.push([`P${pageIdx}`, `R${rowIdx}`, `V${pageIdx}-${rowIdx}`]);
+    }
+    await storeExtractionViaDebug(extPage, `https://example.test/page-${pageIdx}`, `Page ${pageIdx}`, [headers, ...rows]);
+  }
+
+  await extPage.getByRole('button', { name: 'History' }).click();
+  await waitForHistoryLoaded(extPage);
+  await extPage.getByTestId('filter-domain').fill('example.test');
+  await extPage.getByTestId('filters-apply').click();
+  await expect(extPage.getByTestId('results-count')).toHaveText('50 shown');
+
+  await extPage.getByTestId('bulk-download-format').selectOption('csv');
+  const dlPromise = extPage.waitForEvent('download', { timeout: 30_000 });
+  await extPage.getByTestId('bulk-download-go').click();
+  const dl = await dlPromise;
+
+  const savedPath = join(tmpdir(), `table-extract-bulk-${Date.now()}.csv`);
+  await Promise.race([
+    dl.saveAs(savedPath),
+    new Promise((_, reject) => setTimeout(() => reject(new Error('Timed out saving bulk download')), 20_000)),
+  ]);
+
+  const csv = readFileSync(savedPath, 'utf-8');
+  const lines = csv.split(/\r?\n/);
+  expect(lines.length).toBe(2501); // header + 2500 rows
+
+  const header = parseCsvLine(lines[0]!);
+  for (const col of ['url', 'extracted_at', 'domain', 'url_pattern', 'schema_version', 'page_title', ...headers]) {
+    expect(header).toContain(col);
+  }
+
+  try {
+    await Promise.race([
+      context.close(),
+      new Promise((_, reject) => setTimeout(() => reject(new Error('Timed out closing context')), 10_000)),
+    ]);
+  } catch {
+    // Best-effort.
+  }
+});
+
+test('bulk export uses all matching rows even when list is limited to 50', async () => {
+  const userDataDir = mkdtempSync(join(tmpdir(), 'table-extract-pw-'));
+  const extensionPath = resolve(process.cwd(), 'dist');
+
+  const context = await chromium.launchPersistentContext(userDataDir, {
+    headless: false,
+    channel: 'chromium',
+    args: [
+      `--disable-extensions-except=${extensionPath}`,
+      `--load-extension=${extensionPath}`,
+      '--no-first-run',
+      '--no-default-browser-check',
+    ],
+  });
+
+  const extensionId = await getExtensionIdFromContext(context);
+  const extensionUrl = `chrome-extension://${extensionId}/index.html`;
+  const extPage = await context.newPage();
+
+  await extPage.goto(extensionUrl, { waitUntil: 'domcontentloaded' });
+  await waitForPopupLoaded(extPage);
+
+  const headers = ['Seq', 'Value'];
+  for (let i = 1; i <= 60; i++) {
+    await storeExtractionViaDebug(extPage, `https://example.test/page-${i}`, `Page ${i}`, [
+      headers,
+      [String(i), `v-${i}`],
+    ]);
+  }
+
+  await extPage.getByRole('button', { name: 'History' }).click();
+  await waitForHistoryLoaded(extPage);
+  await extPage.getByTestId('filter-domain').fill('example.test');
+  await extPage.getByTestId('filters-apply').click();
+  await expect(extPage.getByTestId('results-count')).toHaveText('50 shown');
+
+  await extPage.getByTestId('bulk-download-format').selectOption('csv');
+  const dlPromise = extPage.waitForEvent('download', { timeout: 30_000 });
+  await extPage.getByTestId('bulk-download-go').click();
+  const dl = await dlPromise;
+
+  const savedPath = join(tmpdir(), `table-extract-bulk-${Date.now()}.csv`);
+  await Promise.race([
+    dl.saveAs(savedPath),
+    new Promise((_, reject) => setTimeout(() => reject(new Error('Timed out saving bulk download')), 20_000)),
+  ]);
+
+  const csv = readFileSync(savedPath, 'utf-8');
+  const lines = csv.split(/\r?\n/);
+  expect(lines.length).toBe(61); // header + 60 rows
+
+  try {
+    await Promise.race([
+      context.close(),
+      new Promise((_, reject) => setTimeout(() => reject(new Error('Timed out closing context')), 10_000)),
+    ]);
+  } catch {
+    // Best-effort.
+  }
+});
+
 test('domain controls: disable auto-capture and delete domain data', async () => {
   const userDataDir = mkdtempSync(join(tmpdir(), 'table-extract-pw-'));
   const extensionPath = resolve(process.cwd(), 'dist');
